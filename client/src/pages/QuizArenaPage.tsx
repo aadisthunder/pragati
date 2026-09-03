@@ -47,7 +47,7 @@ export const QuizArenaPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   // Timers
-  const [totalTimeLeftSec, setTotalTimeLeftSec] = useState(600); // 10 min default
+  const [totalTimeLeftSec, setTotalTimeLeftSec] = useState(600);
   const [questionDwellSec, setQuestionDwellSec] = useState(0);
   const [hintVisible, setHintVisible] = useState(false);
 
@@ -63,7 +63,7 @@ export const QuizArenaPage: React.FC = () => {
       .then((data) => {
         setQuiz(data.quiz);
         setQuestions(data.questions);
-        setTotalTimeLeftSec(data.questions.length * 120); // 2 mins per question
+        setTotalTimeLeftSec(data.questions.length * 120);
         setLoading(false);
       })
       .catch((err) => {
@@ -132,7 +132,6 @@ export const QuizArenaPage: React.FC = () => {
   };
 
   const handleNext = () => {
-    // Record dwell time for current question before advancing
     if (currentQuestion) {
       setAnswers((prev) => ({
         ...prev,
@@ -171,7 +170,6 @@ export const QuizArenaPage: React.FC = () => {
     if (submitting || !quizId) return;
     setSubmitting(true);
 
-    // Ensure current question time is recorded
     const finalAnswersObj = {
       ...answers,
       ...(currentQuestion
@@ -220,7 +218,7 @@ export const QuizArenaPage: React.FC = () => {
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-sky-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#7A22E8]" />
       </div>
     );
   }
@@ -229,52 +227,52 @@ export const QuizArenaPage: React.FC = () => {
   if (isSubmitted && attemptResult) {
     const { summary, results } = attemptResult;
     return (
-      <div className="max-w-4xl mx-auto w-full p-4 md:p-8 space-y-6">
+      <div className="max-w-4xl mx-auto w-full p-4 md:p-8 space-y-6 font-sans">
         {/* Score Card */}
-        <div className="glass-card p-6 md:p-8 rounded-2xl border-2 border-sky-300/80 bg-white/95 text-center">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-sky-50 text-sky-600 mb-4 border border-sky-200">
-            <Award className="w-7 h-7" />
+        <div className="glass-card p-6 md:p-8 rounded-3xl border border-[#D8B4FE] bg-white/95 text-center shadow-sm">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[#F3ECFF] text-[#7A22E8] mb-4 border border-[#D8B4FE] shadow-sm">
+            <Award className="w-8 h-8" />
           </div>
-          <h2 className="text-2xl font-extrabold text-slate-900">Quiz Completed!</h2>
+          <h2 className="text-2xl font-display font-extrabold text-[#2E1D5E] tracking-tight">Quiz Completed!</h2>
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-1">{quiz?.topic}</p>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6">
-            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/70">
+            <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/70">
               <span className="text-xs text-slate-500 font-medium">Score</span>
-              <p className="text-2xl font-black text-sky-600 font-mono mt-0.5">
+              <p className="text-2xl font-black text-[#7A22E8] font-mono mt-0.5">
                 {summary.score} / {summary.total_questions}
               </p>
             </div>
-            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/70">
+            <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/70">
               <span className="text-xs text-slate-500 font-medium">Accuracy</span>
-              <p className="text-2xl font-black text-slate-900 font-mono mt-0.5">
+              <p className="text-2xl font-black text-[#2E1D5E] font-mono mt-0.5">
                 {summary.accuracy_pct}%
               </p>
             </div>
-            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/70">
+            <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/70">
               <span className="text-xs text-slate-500 font-medium">Total Duration</span>
-              <p className="text-2xl font-black text-slate-900 font-mono mt-0.5">
+              <p className="text-2xl font-black text-[#2E1D5E] font-mono mt-0.5">
                 {formatTimer(summary.total_time_sec)}
               </p>
             </div>
-            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/70">
+            <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/70">
               <span className="text-xs text-slate-500 font-medium">Rating Change</span>
-              <p className="text-2xl font-black text-violet-600 font-mono mt-0.5">
+              <p className="text-2xl font-black text-[#7A22E8] font-mono mt-0.5">
                 {summary.rating_change >= 0 ? `+${summary.rating_change}` : summary.rating_change} ELO
               </p>
             </div>
           </div>
 
-          <div className="flex items-center justify-center gap-3 mt-6">
+          <div className="flex items-center justify-center gap-3 mt-8">
             <button
               onClick={() => navigate('/quizzes')}
-              className="px-4 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl shadow-sm transition"
+              className="btn-deezer-secondary px-5 py-2.5 text-xs font-display"
             >
               Back to Catalog
             </button>
             <button
               onClick={() => navigate('/instructor')}
-              className="px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl shadow-sm transition flex items-center gap-1.5"
+              className="btn-deezer-primary px-5 py-2.5 text-xs font-display"
             >
               <span>Review Missed with AI</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -284,13 +282,13 @@ export const QuizArenaPage: React.FC = () => {
 
         {/* Detailed Question Review */}
         <div className="space-y-4">
-          <h3 className="text-base font-bold text-slate-900">Question-by-Question Diagnostic</h3>
+          <h3 className="text-lg font-display font-bold text-[#2E1D5E]">Question-by-Question Diagnostic</h3>
           {results.map((r: any, idx: number) => (
-            <div key={idx} className="glass-card p-5 rounded-2xl space-y-3">
+            <div key={idx} className="glass-card p-6 rounded-3xl space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500">Question {idx + 1}</span>
+                <span className="text-xs font-bold text-slate-500 font-display">Question {idx + 1}</span>
                 <span
-                  className={`text-xs font-bold px-2.5 py-0.5 rounded-md flex items-center gap-1.5 ${
+                  className={`text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1.5 ${
                     r.is_correct
                       ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                       : r.is_skipped
@@ -313,20 +311,20 @@ export const QuizArenaPage: React.FC = () => {
                 </ReactMarkdown>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono pt-2">
-                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs font-mono pt-2">
+                <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
                   <span className="text-slate-400 block text-[10px] uppercase font-sans font-bold">Your Choice</span>
                   <span className="font-bold text-slate-800">{r.selected_answer || 'None (Skipped)'}</span>
                 </div>
-                <div className="p-2.5 rounded-lg bg-emerald-50/50 border border-emerald-200">
+                <div className="p-3 rounded-2xl bg-emerald-50/50 border border-emerald-200">
                   <span className="text-emerald-600 block text-[10px] uppercase font-sans font-bold">Correct Answer</span>
                   <span className="font-bold text-emerald-800">{r.correct_answer}</span>
                 </div>
               </div>
 
               {r.explanation && (
-                <div className="p-3 bg-sky-50/60 border border-sky-200/70 rounded-xl text-xs text-slate-700 leading-relaxed">
-                  <strong className="text-sky-900 font-bold block mb-1">Explanation:</strong>
+                <div className="p-3.5 bg-[#F3ECFF]/50 border border-[#D8B4FE] rounded-2xl text-xs text-slate-700 leading-relaxed">
+                  <strong className="text-[#7A22E8] font-display font-bold block mb-1">Explanation:</strong>
                   <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
                     {r.explanation}
                   </ReactMarkdown>
@@ -341,27 +339,27 @@ export const QuizArenaPage: React.FC = () => {
 
   // --- ACTIVE QUIZ TAKING SCREEN ---
   return (
-    <div className="max-w-3xl mx-auto w-full p-4 md:p-8 flex flex-col h-full justify-between">
-      {/* Top Bar with Dual Monospace Timers */}
-      <div className="glass-panel p-3.5 rounded-2xl flex items-center justify-between border border-slate-200 mb-6 shadow-sm">
+    <div className="max-w-3xl mx-auto w-full p-4 md:p-8 flex flex-col h-full justify-between font-sans">
+      {/* Top Bar with Dual Monospace Timers (Sticky & Compact) */}
+      <div className="sticky top-0 z-20 glass-panel px-4 py-3 rounded-2xl flex items-center justify-between border border-slate-200/90 mb-6 shadow-sm backdrop-blur-md">
         <div>
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider font-display">
             {quiz?.topic}
           </span>
-          <p className="text-xs text-slate-700 font-bold font-mono mt-0.5">
+          <p className="text-xs text-[#2E1D5E] font-bold font-mono mt-0.5">
             Question {currentIndex + 1} of {questions.length}
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           {/* Question Dwell Timer */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 text-violet-700 rounded-xl border border-violet-200 font-mono text-xs font-bold">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F3ECFF] text-[#7A22E8] rounded-full border border-[#D8B4FE] font-mono text-xs font-bold">
             <Hourglass className="w-3.5 h-3.5" />
             <span>{formatTimer(questionDwellSec)}</span>
           </div>
 
           {/* Overall Test Timer */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 text-sky-700 rounded-xl border border-sky-200 font-mono text-xs font-bold">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-700 rounded-full border border-slate-200 font-mono text-xs font-bold shadow-sm">
             <Clock className="w-3.5 h-3.5" />
             <span>{formatTimer(totalTimeLeftSec)}</span>
           </div>
@@ -370,7 +368,7 @@ export const QuizArenaPage: React.FC = () => {
 
       {/* Question Card with LaTeX Rendering */}
       {currentQuestion && (
-        <div className="glass-card p-6 md:p-8 rounded-2xl space-y-6 flex-1 flex flex-col justify-between">
+        <div className="glass-card p-6 md:p-8 rounded-3xl space-y-6 flex-1 flex flex-col justify-between shadow-sm">
           <div className="space-y-4">
             <div className="prose prose-base max-w-none text-slate-900 font-medium">
               <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
@@ -380,33 +378,33 @@ export const QuizArenaPage: React.FC = () => {
 
             {/* Hint reveal drawer */}
             {hintVisible && currentQuestion.hint && (
-              <div className="p-3.5 bg-amber-50/80 border border-amber-200/80 rounded-xl text-xs text-amber-900 animate-in fade-in">
-                <strong className="font-bold block mb-0.5 flex items-center gap-1">
-                  <Lightbulb className="w-3.5 h-3.5" />
+              <div className="p-4 bg-amber-50/80 border border-amber-200/80 rounded-2xl text-xs text-amber-900 animate-in fade-in">
+                <strong className="font-bold block mb-1 flex items-center gap-1.5 font-display">
+                  <Lightbulb className="w-4 h-4" />
                   <span>Targeted Hint:</span>
                 </strong>
                 <span>{currentQuestion.hint}</span>
               </div>
             )}
 
-            {/* Options List */}
-            <div className="space-y-2.5 pt-2">
+            {/* Options List with Cognitive Prism Selection Pills */}
+            <div className="space-y-3 pt-2">
               {currentQuestion.options.map((opt) => {
                 const isSelected = answers[currentQuestion.id]?.selected_answer === opt.id;
                 return (
                   <button
                     key={opt.id}
                     onClick={() => handleSelectOption(opt.id)}
-                    className={`w-full flex items-center gap-4 p-4 rounded-xl text-left text-sm font-semibold transition-all border ${
+                    className={`w-full flex items-center gap-4 p-4 rounded-2xl text-left text-sm font-semibold transition-all border ${
                       isSelected
-                        ? 'bg-sky-50 border-sky-500 text-sky-900 shadow-sm ring-1 ring-sky-500'
+                        ? 'bg-[#F3ECFF] border-[#7A22E8] text-slate-900 shadow-sm ring-1 ring-[#7A22E8]'
                         : 'bg-white/80 border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
                     }`}
                   >
                     <span
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center font-mono text-xs font-bold ${
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center font-mono text-xs font-bold transition-colors ${
                         isSelected
-                          ? 'bg-sky-600 text-white'
+                          ? 'bg-[#7A22E8] text-white shadow-sm'
                           : 'bg-slate-100 text-slate-600'
                       }`}
                     >
@@ -425,7 +423,7 @@ export const QuizArenaPage: React.FC = () => {
               {currentQuestion.hint && !hintVisible && (
                 <button
                   onClick={handleRevealHint}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/70 rounded-xl transition"
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/70 rounded-full transition"
                 >
                   <Lightbulb className="w-3.5 h-3.5" />
                   <span>Request Hint</span>
@@ -433,7 +431,7 @@ export const QuizArenaPage: React.FC = () => {
               )}
               <button
                 onClick={handleSkip}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl transition"
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 bg-white border border-slate-200 hover:bg-slate-50 rounded-full transition"
               >
                 <SkipForward className="w-3.5 h-3.5" />
                 <span>Skip</span>
@@ -443,7 +441,7 @@ export const QuizArenaPage: React.FC = () => {
             {currentIndex < questions.length - 1 ? (
               <button
                 onClick={handleNext}
-                className="flex items-center gap-2 px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl shadow-sm transition"
+                className="btn-deezer-primary px-6 py-2.5 text-xs font-display"
               >
                 <span>Next Question</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -452,7 +450,7 @@ export const QuizArenaPage: React.FC = () => {
               <button
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm transition disabled:opacity-50"
+                className="btn-deezer-primary px-6 py-2.5 text-xs font-display disabled:opacity-50"
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                 <span>Submit Quiz</span>

@@ -11,6 +11,7 @@ export function getLLM(modelName: string = 'deepseek.v3.1', temperature: number 
     apiKey: bedrockMantleKey,
     model: modelName,
     temperature,
+    maxTokens: 3072,
     configuration: {
       baseURL,
     },
@@ -28,6 +29,92 @@ Your core teaching philosophy is Socratic:
    - "get_attempt_telemetry": Call this to see which questions the student missed, skipped, or struggled with on a specific quiz attempt.
    - "explain_missed_question": Call this to retrieve the exact question details to tutor the student on their mistakes.
 When a student asks you to review what they got wrong, first use get_student_attempts or get_attempt_telemetry to diagnose their weaknesses, then tutor them Socratically on the missed concepts.`;
+
+/**
+ * Robust extractor for tool calls from LangChain and OpenAI-compatible raw payloads (Bedrock Mantle).
+ * Handles partial JSON strings and missing trailing braces gracefully.
+ */
+export function extractToolCalls(aiResponse: any): Array<{ id?: string; name: string; args: any }> {
+  const calls: Array<{ id?: string; name: string; args: any }> = [];
+
+  // 1. LangChain native parsed tool_calls
+  if (Array.isArray(aiResponse?.tool_calls) && aiResponse.tool_calls.length > 0) {
+    for (const tc of aiResponse.tool_calls) {
+      if (tc && tc.name) {
+        calls.push({
+          id: tc.id,
+          name: tc.name,
+          args: tc.args || {},
+        });
+      }
+    }
+  }
+
+  // 2. Raw additional_kwargs.tool_calls (OpenAI format returned by Bedrock Mantle DeepSeek)
+  const rawToolCalls = aiResponse?.additional_kwargs?.tool_calls;
+  if (Array.isArray(rawToolCalls) && rawToolCalls.length > 0) {
+    for (const raw of rawToolCalls) {
+      const name = raw.function?.name;
+      if (!name) continue;
+
+      let args: any = {};
+      const rawArgs = raw.function?.arguments;
+      if (typeof rawArgs === 'string') {
+        try {
+          args = JSON.parse(rawArgs);
+        } catch {
+          // Attempt repair of unclosed JSON brackets from streaming/truncated outputs
+          let cleaned = rawArgs.trim();
+          if (!cleaned.endsWith('}')) cleaned += '}';
+          try {
+            args = JSON.parse(cleaned);
+          } catch {
+            args = {};
+          }
+        }
+      } else if (typeof rawArgs === 'object' && rawArgs !== null) {
+        args = rawArgs;
+      }
+
+      // Avoid duplicates if already populated by native LangChain tool_calls
+      if (!calls.some(c => c.name === name)) {
+        calls.push({
+          id: raw.id,
+          name,
+          args,
+        });
+      }
+    }
+  }
+
+  // 3. Legacy additional_kwargs.function_call
+  const rawFuncCall = aiResponse?.additional_kwargs?.function_call;
+  if (rawFuncCall && rawFuncCall.name) {
+    let args: any = {};
+    if (typeof rawFuncCall.arguments === 'string') {
+      try {
+        args = JSON.parse(rawFuncCall.arguments);
+      } catch {
+        let cleaned = rawFuncCall.arguments.trim();
+        if (!cleaned.endsWith('}')) cleaned += '}';
+        try {
+          args = JSON.parse(cleaned);
+        } catch {
+          args = {};
+        }
+      }
+    }
+    if (!calls.some(c => c.name === rawFuncCall.name)) {
+      calls.push({
+        id: 'func_call',
+        name: rawFuncCall.name,
+        args,
+      });
+    }
+  }
+
+  return calls;
+}
 
 export async function processAgentChat(
   userId: string,
@@ -54,10 +141,11 @@ export async function processAgentChat(
   messages.push(aiResponse);
 
   const toolExecutions: any[] = [];
+  const detectedToolCalls = extractToolCalls(aiResponse);
 
-  // If the model generated tool calls, execute them and re-invoke
-  if (aiResponse.tool_calls && aiResponse.tool_calls.length > 0) {
-    for (const toolCall of aiResponse.tool_calls) {
+  // If the model generated tool calls, execute them dynamically and re-invoke
+  if (detectedToolCalls.length > 0) {
+    for (const toolCall of detectedToolCalls) {
       const selectedTool = toolMap.get(toolCall.name);
       if (selectedTool) {
         try {
@@ -69,7 +157,7 @@ export async function processAgentChat(
           });
           messages.push(
             new ToolMessage({
-              tool_call_id: toolCall.id || toolCall.name,
+              tool_call_id: toolCall.id || `call_${toolCall.name}`,
               name: toolCall.name,
               content: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult),
             })
@@ -77,7 +165,7 @@ export async function processAgentChat(
         } catch (err: any) {
           messages.push(
             new ToolMessage({
-              tool_call_id: toolCall.id || toolCall.name,
+              tool_call_id: toolCall.id || `call_${toolCall.name}`,
               name: toolCall.name,
               content: `Error executing ${toolCall.name}: ${err.message}`,
             })
@@ -86,7 +174,7 @@ export async function processAgentChat(
       }
     }
 
-    // Final response incorporating tool outputs
+    // Final response incorporating dynamic tool outputs
     aiResponse = await llmWithTools.invoke(messages);
   }
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Sparkles, Mail, ArrowRight, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Mail, ArrowRight, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const { signInWithGoogle, signInWithEmailOtp } = useAuth();
@@ -36,23 +36,25 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-100 via-white to-sky-50">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-[#FAF8FD]">
       <div className="w-full max-w-md">
-        {/* Header */}
+        {/* Header with Official Cognitive Prism Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-sky-600 text-white shadow-sm mb-3">
-            <Sparkles className="w-6 h-6" />
-          </div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Welcome to Pragati</h1>
-          <p className="text-sm text-slate-500 mt-1 font-medium">
+          <img
+            src="/logo.png"
+            alt="Pragati Logo"
+            className="w-16 h-16 rounded-3xl object-cover shadow-lg shadow-purple-500/25 mb-4 mx-auto border border-purple-200/80"
+          />
+          <h1 className="text-3xl font-display font-extrabold text-[#2E1D5E] tracking-tight">Welcome to Pragati</h1>
+          <p className="text-sm text-slate-500 mt-2 font-medium">
             AI-driven Socratic tutor and telemetry-backed learning arena
           </p>
         </div>
 
-        {/* Glassmorphic Auth Card */}
-        <div className="glass-card p-8 rounded-2xl">
+        {/* Frosted Glass Auth Card */}
+        <div className="glass-card p-8 rounded-3xl shadow-sm">
           {error && (
-            <div className="flex items-center gap-2 p-3.5 mb-6 text-sm text-red-700 bg-red-50/80 border border-red-200/80 rounded-xl">
+            <div className="flex items-center gap-2 p-3.5 mb-6 text-sm text-red-700 bg-red-50/80 border border-red-200/80 rounded-2xl">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
               <span>{error}</span>
             </div>
@@ -63,13 +65,13 @@ export const LoginPage: React.FC = () => {
               <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200/80 text-emerald-600 flex items-center justify-center mx-auto mb-4">
                 <CheckCircle2 className="w-6 h-6" />
               </div>
-              <h3 className="text-base font-bold text-slate-900">Check your inbox</h3>
+              <h3 className="text-base font-display font-bold text-[#2E1D5E]">Check your inbox</h3>
               <p className="text-sm text-slate-600 mt-2">
                 We sent a passwordless sign-in link to <strong className="text-slate-900">{email}</strong>.
               </p>
               <button
                 onClick={() => setEmailSent(false)}
-                className="mt-6 text-xs font-semibold text-sky-600 hover:text-sky-700 underline"
+                className="mt-6 text-xs font-semibold text-[#7A22E8] hover:text-[#6918C8] underline"
               >
                 Sign in with a different email
               </button>
@@ -79,7 +81,7 @@ export const LoginPage: React.FC = () => {
               {/* Option 1: Google OAuth */}
               <button
                 onClick={handleGoogleSignIn}
-                className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white hover:bg-slate-50 text-slate-800 text-sm font-bold rounded-xl border border-slate-300/80 shadow-sm transition-all duration-150 hover:shadow"
+                className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white hover:bg-slate-50 text-slate-800 text-sm font-semibold rounded-full border border-slate-200/90 shadow-sm transition-all duration-150 hover:shadow"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24">
                   <path
@@ -112,7 +114,7 @@ export const LoginPage: React.FC = () => {
               {/* Option 2: Passwordless Email Magic Link */}
               <form onSubmit={handleEmailSignIn} className="space-y-4">
                 <div>
-                  <label htmlFor="email" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  <label htmlFor="email" className="block text-xs font-bold text-[#2E1D5E] uppercase tracking-wider mb-1.5 font-display">
                     Email Address
                   </label>
                   <div className="relative">
@@ -124,7 +126,7 @@ export const LoginPage: React.FC = () => {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="student@university.edu"
-                      className="w-full pl-10 pr-4 py-2.5 bg-white/75 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500 transition-all"
+                      className="w-full pl-10 pr-4 py-2.5 bg-white/80 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#7A22E8]/30 focus:border-[#7A22E8] transition-all"
                     />
                   </div>
                 </div>
@@ -132,7 +134,7 @@ export const LoginPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold rounded-xl shadow-sm hover:shadow transition-all disabled:opacity-60"
+                  className="w-full btn-deezer-primary py-3 text-sm disabled:opacity-60"
                 >
                   {isSubmitting ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
