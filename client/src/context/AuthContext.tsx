@@ -19,6 +19,7 @@ interface AuthContextType {
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   signInWithEmailOtp: (email: string) => Promise<{ error?: string }>;
+  signInAsJudge: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -89,6 +90,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return {};
   };
 
+  const signInAsJudge = async () => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: 'judge.pragati@gmail.com',
+      password: 'JudgeDemoPassword2026!',
+    });
+    if (error) throw error;
+    if (data.session) {
+      setSession(data.session);
+      setUser(data.user);
+      await fetchProfile();
+    }
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -105,6 +119,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         signInWithGoogle,
         signInWithEmailOtp,
+        signInAsJudge,
         signOut,
         refreshProfile: fetchProfile,
       }}

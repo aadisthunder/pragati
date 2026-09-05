@@ -18,17 +18,24 @@ export function getLLM(modelName: string = 'deepseek.v3.1', temperature: number 
   });
 }
 
-export const SYSTEM_PROMPT = `You are Pragati AI Instructor, an intelligent, empathetic, and highly skilled STEM academic tutor.
+export const SYSTEM_PROMPT = `You are Pragati AI Instructor, an intelligent, empathetic, and highly skilled academic tutor.
 Your core teaching philosophy is Socratic:
 1. Guide students step-by-step through first principles instead of immediately giving away flat answers.
 2. Render all mathematical equations, scientific variables, and formulas using clean LaTeX format (e.g. $E = mc^2$ or $$\\int x dx$$).
 3. Strictly DO NOT use emojis anywhere in your responses, titles, or explanations. Use clear typography and bullet points.
-4. You have access to powerful tools:
-   - "generate_quiz": Call this whenever the user asks for a test, quiz, practice problems, or assessment on any topic.
-   - "get_student_attempts": Call this to inspect the user's past quiz history and scores.
+4. Conversational Flow & Intent:
+   - Always prioritize the user's latest message.
+   - When the user sends a greeting (e.g., "hi", "hello", "hey") or casual message, warmly greet them back and ask what they would like to learn or practice today. DO NOT invoke any tools or bring up old quiz topics on greetings.
+   - Do NOT fixate or loop on past tool operations unless the user's current message specifically asks about them.
+5. You have access to powerful tools (use them ONLY when actively requested by the user's current prompt):
+   - "generate_quiz": Call this whenever the user explicitly asks for a test, quiz, practice problems, or assessment on any topic.
+   - "get_student_attempts": Call this when the user asks to inspect their quiz history, past attempts, or scores.
    - "get_attempt_telemetry": Call this to see which questions the student missed, skipped, or struggled with on a specific quiz attempt.
    - "explain_missed_question": Call this to retrieve the exact question details to tutor the student on their mistakes.
-When a student asks you to review what they got wrong, first use get_student_attempts or get_attempt_telemetry to diagnose their weaknesses, then tutor them Socratically on the missed concepts.`;
+When a student asks you to review what they got wrong, first use get_student_attempts or get_attempt_telemetry to diagnose their weaknesses, then tutor them Socratically on the missed concepts.
+6. Formatting & Visual Presentation:
+   - When presenting available tools, key concepts, study topics, or structured steps, format each item as a bullet point with a bold title (e.g. "- **Title**: Description"). These render as individual visual outline cards in the student's interface.
+   - Separate distinct ideas, sections, and topics with clean blank lines and markdown subheadings (###) to maintain generous vertical spacing and prevent dense walls of text.`;
 
 /**
  * Robust extractor for tool calls from LangChain and OpenAI-compatible raw payloads (Bedrock Mantle).
@@ -116,12 +123,17 @@ export function extractToolCalls(aiResponse: any): Array<{ id?: string; name: st
   return calls;
 }
 
+export type AgentStepCallback = (step: { phase: string; text: string; tool?: string }) => void;
+
 export async function processAgentChat(
   userId: string,
   userMessage: string,
   history: Array<{ role: string; content: string }> = [],
-  userToken: string
+  userToken: string,
+  onStep?: AgentStepCallback
 ) {
+  onStep?.({ phase: 'thinking', text: 'Thinking...' });
+
   const scopedClient = createScopedClient(userToken);
   const llm = getLLM('deepseek.v3.1', 0.2);
   const tools = createAgentTools(scopedClient, userId, llm);
@@ -138,16 +150,26 @@ export async function processAgentChat(
 
   // Run initial model call
   let aiResponse = await llmWithTools.invoke(messages);
-  messages.push(aiResponse);
-
   const toolExecutions: any[] = [];
   const detectedToolCalls = extractToolCalls(aiResponse);
 
   // If the model generated tool calls, execute them dynamically and re-invoke
   if (detectedToolCalls.length > 0) {
+    // Build a sanitized assistant message with clean, valid JSON tool_calls
+    const cleanAIMessage = new AIMessage({
+      content: typeof aiResponse.content === 'string' ? aiResponse.content : '',
+      tool_calls: detectedToolCalls.map(tc => ({
+        id: tc.id || `call_${tc.name}`,
+        name: tc.name,
+        args: tc.args,
+      })),
+    });
+    messages.push(cleanAIMessage);
+    onStep?.({ phase: 'searching', text: 'Searching academic tools...' });
     for (const toolCall of detectedToolCalls) {
       const selectedTool = toolMap.get(toolCall.name);
       if (selectedTool) {
+        onStep?.({ phase: 'calling_tool', tool: toolCall.name, text: `Calling tool: ${toolCall.name}...` });
         try {
           const toolResult = await (selectedTool as any).invoke(toolCall.args);
           toolExecutions.push({
@@ -155,6 +177,7 @@ export async function processAgentChat(
             args: toolCall.args,
             result: toolResult,
           });
+          onStep?.({ phase: 'viewing_results', tool: toolCall.name, text: `Viewing results from ${toolCall.name}...` });
           messages.push(
             new ToolMessage({
               tool_call_id: toolCall.id || `call_${toolCall.name}`,
@@ -163,6 +186,12 @@ export async function processAgentChat(
             })
           );
         } catch (err: any) {
+          toolExecutions.push({
+            name: toolCall.name,
+            args: toolCall.args,
+            error: err.message,
+            result: `Error executing ${toolCall.name}: ${err.message}`,
+          });
           messages.push(
             new ToolMessage({
               tool_call_id: toolCall.id || `call_${toolCall.name}`,
@@ -174,13 +203,32 @@ export async function processAgentChat(
       }
     }
 
+    onStep?.({ phase: 'analyzing', text: 'Analyzing results & formulating guidance...' });
     // Final response incorporating dynamic tool outputs
     aiResponse = await llmWithTools.invoke(messages);
   }
 
-  const finalReply = typeof aiResponse.content === 'string' 
-    ? aiResponse.content 
+  let finalReply = typeof aiResponse.content === 'string' 
+    ? aiResponse.content.trim()
     : JSON.stringify(aiResponse.content);
+
+  if (!finalReply) {
+    if (toolExecutions.length > 0) {
+      const firstGen = toolExecutions.find(t => t.name === 'generate_quiz');
+      if (firstGen) {
+        let topic = 'the requested topic';
+        try {
+          const resObj = typeof firstGen.result === 'string' ? JSON.parse(firstGen.result) : firstGen.result;
+          if (resObj.topic) topic = resObj.topic;
+        } catch {}
+        finalReply = `I have generated a practice quiz on "${topic}". You can start taking it using the card below!`;
+      } else {
+        finalReply = `I analyzed the academic tools and data for your request. Let me know how you would like to proceed!`;
+      }
+    } else {
+      finalReply = `I am here to help guide you through academic concepts and practice. What would you like to explore?`;
+    }
+  }
 
   return {
     reply: finalReply,

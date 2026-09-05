@@ -51,7 +51,28 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
         
         // Clean markdown fences if any
         rawContent = rawContent.replace(/```json/gi, '').replace(/```/g, '').trim();
-        const parsed = JSON.parse(rawContent);
+        let parsed: any;
+        try {
+          parsed = JSON.parse(rawContent);
+        } catch {
+          let cleaned = rawContent.trim();
+          if (!cleaned.endsWith('}')) cleaned += '}';
+          try {
+            parsed = JSON.parse(cleaned);
+          } catch {
+            return 'Failed to parse generated quiz structure into valid JSON.';
+          }
+        }
+
+        const questionsList = Array.isArray(parsed?.questions)
+          ? parsed.questions
+          : Array.isArray(parsed?.quiz)
+          ? parsed.quiz
+          : [];
+
+        if (questionsList.length === 0) {
+          return 'Failed to generate quiz: LLM did not return a valid list of questions.';
+        }
 
         // Save to Supabase
         const { data: quiz, error: quizError } = await supabaseClient
@@ -60,7 +81,7 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
             created_by: userId,
             topic: parsed.topic || topic,
             difficulty: parsed.difficulty || difficulty,
-            total_questions: parsed.questions.length,
+            total_questions: questionsList.length,
           })
           .select()
           .single();
@@ -69,13 +90,13 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
           return `Failed to save quiz: ${quizError?.message || 'Unknown database error'}`;
         }
 
-        const questionsToInsert = parsed.questions.map((q: any, idx: number) => ({
+        const questionsToInsert = questionsList.map((q: any, idx: number) => ({
           quiz_id: quiz.id,
-          prompt: q.prompt,
-          options: q.options,
-          correct_answer: q.correct_answer,
-          hint: q.hint,
-          explanation: q.explanation,
+          prompt: q.prompt || 'Question',
+          options: Array.isArray(q.options) ? q.options : [],
+          correct_answer: q.correct_answer || 'A',
+          hint: q.hint || '',
+          explanation: q.explanation || '',
           order_index: idx,
         }));
 

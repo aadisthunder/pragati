@@ -11,37 +11,32 @@
 
 @layer utilities {
   .glass-panel {
-    background: rgba(255, 255, 255, 0.9);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: #FFFFFF;
     border: 1px solid rgba(226, 232, 240, 0.85);
   }
 
   .glass-card {
-    background: rgba(255, 255, 255, 0.92);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: #FFFFFF;
     border: 1px solid rgba(226, 232, 240, 0.9);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03), 0 2px 4px -2px rgba(0, 0, 0, 0.02);
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04);
+    transition: all 0.15s ease;
   }
 
   .glass-card:hover {
-    background: rgba(255, 255, 255, 0.98);
-    border-color: #D8B4FE;
-    box-shadow: 0 10px 20px -3px rgba(122, 34, 232, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.02);
+    background: #FFFFFF;
+    border-color: #CBD5E1;
   }
 
-  /* Velvet Violet Action Utilities */
+  /* Action Utilities */
   .btn-deezer-primary, .btn-prism-primary {
-    background-color: #7A22E8;
+    background-color: #0F172A;
     color: #FFFFFF;
     font-family: 'Plus Jakarta Sans', sans-serif;
-    font-weight: 700;
-    border-radius: 9999px;
-    padding: 0.625rem 1.5rem;
-    box-shadow: 0 4px 14px rgba(122, 34, 232, 0.28);
-    transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    font-weight: 600;
+    border-radius: 0.75rem;
+    padding: 0.5rem 1.25rem;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    transition: all 0.15s ease;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -49,23 +44,21 @@
   }
 
   .btn-deezer-primary:hover, .btn-prism-primary:hover {
-    background-color: #6918C8;
-    box-shadow: 0 6px 18px rgba(122, 34, 232, 0.38);
-    transform: translateY(-1px);
+    background-color: #1E293B;
+    box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.08);
   }
 
   .btn-deezer-primary:active, .btn-prism-primary:active {
-    background-color: #5A12B0;
-    transform: translateY(0px) scale(0.99);
+    background-color: #020617;
   }
 
   .btn-deezer-secondary, .btn-prism-secondary {
-    background-color: rgba(255, 255, 255, 0.92);
-    color: #2E1D5E;
+    background-color: #FFFFFF;
+    color: #334155;
     font-family: 'Inter', sans-serif;
     font-weight: 600;
-    border-radius: 9999px;
-    padding: 0.625rem 1.25rem;
+    border-radius: 0.75rem;
+    padding: 0.5rem 1.25rem;
     border: 1px solid #E2E8F0;
     transition: all 0.15s ease;
     display: inline-flex;
@@ -75,9 +68,9 @@
   }
 
   .btn-deezer-secondary:hover, .btn-prism-secondary:hover {
-    background-color: #F3ECFF;
-    border-color: #D8B4FE;
-    color: #7A22E8;
+    background-color: #F8FAFC;
+    border-color: #CBD5E1;
+    color: #0F172A;
   }
 
   .subtle-scroll::-webkit-scrollbar {
@@ -92,6 +85,6 @@
     border-radius: 9999px;
   }
   .subtle-scroll::-webkit-scrollbar-thumb:hover {
-    background: rgba(122, 34, 232, 0.4);
+    background: rgba(100, 116, 139, 0.6);
   }
 }

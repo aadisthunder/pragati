@@ -3,6 +3,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 
+import { markdownCardStyles } from '../../utils/markdownCards';
+
 interface TypewriterMessageProps {
   content: string;
   animate?: boolean;
@@ -75,7 +77,19 @@ export const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
       }`}
       title={isTyping ? 'Click message to skip typewriter animation' : undefined}
     >
-      <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+      <ReactMarkdown
+        remarkPlugins={[remarkMath]}
+        rehypePlugins={[rehypeKatex]}
+        components={{
+          ul: ({ ...props }) => <ul className={markdownCardStyles.list} {...props} />,
+          ol: ({ ...props }) => <ol className={markdownCardStyles.list} {...props} />,
+          li: ({ ...props }) => <li className={markdownCardStyles.cardItem} {...props} />,
+          h3: ({ ...props }) => <h3 className={markdownCardStyles.heading3} {...props} />,
+          h4: ({ ...props }) => <h4 className={markdownCardStyles.heading3} {...props} />,
+          blockquote: ({ ...props }) => <blockquote className={markdownCardStyles.blockquote} {...props} />,
+          p: ({ ...props }) => <p className={markdownCardStyles.paragraph} {...props} />,
+        }}
+      >
         {visibleText}
       </ReactMarkdown>
 

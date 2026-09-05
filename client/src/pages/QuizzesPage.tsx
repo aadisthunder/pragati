@@ -1,7 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiRequest } from '../api/client';
-import { CheckSquare, ArrowRight, Loader2, Plus, BookOpen } from 'lucide-react';
+import { apiRequest, apiRequestCached, getFromCache, invalidateCache } from '../api/client';
+import {
+  CheckSquare,
+  ArrowRight,
+  Loader2,
+  Plus,
+  BookOpen,
+  Search,
+  MoreVertical,
+  Bot,
+  Trash2,
+} from 'lucide-react';
+import { getSecondaryBadgeClass } from '../utils/theme';
 
 interface Quiz {
   id: string;
@@ -12,16 +23,19 @@ interface Quiz {
 }
 
 export const QuizzesPage: React.FC = () => {
-  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [generatingTopic, setGeneratingTopic] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
+  const cachedInitial = getFromCache<{ quizzes: Quiz[] }>('/api/quizzes');
+  const [quizzes, setQuizzes] = useState<Quiz[]>(cachedInitial?.quizzes || []);
+  const [loading, setLoading] = useState(!cachedInitial);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeMenuQuizId, setActiveMenuQuizId] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const fetchQuizzes = async () => {
+  const fetchQuizzes = async (forceSpinner = false) => {
     try {
-      setLoading(true);
-      const data = await apiRequest<{ quizzes: Quiz[] }>('/api/quizzes');
+      if (forceSpinner || !getFromCache('/api/quizzes')) {
+        setLoading(true);
+      }
+      const data = await apiRequestCached<{ quizzes: Quiz[] }>('/api/quizzes');
       setQuizzes(data.quizzes || []);
     } catch (err) {
       console.error('Failed to load quizzes', err);
@@ -34,117 +48,194 @@ export const QuizzesPage: React.FC = () => {
     fetchQuizzes();
   }, []);
 
-  const handleQuickGenerate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!generatingTopic.trim() || isGenerating) return;
+  // Close 3-dot menu on click outside
+  useEffect(() => {
+    const handleClickOutside = () => setActiveMenuQuizId(null);
+    if (activeMenuQuizId) {
+      window.addEventListener('click', handleClickOutside);
+    }
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, [activeMenuQuizId]);
 
-    setIsGenerating(true);
+  const handleGenerateRedirect = () => {
+    const trimmed = searchQuery.trim();
+    const prompt = trimmed
+      ? `Please generate a practice quiz for me on "${trimmed}".`
+      : 'Please generate a personalized practice quiz for me on a topic of your choice.';
+    navigate(`/instructor?prompt=${encodeURIComponent(prompt)}`);
+  };
+
+  const handleEditWithAI = (e: React.MouseEvent, quiz: Quiz) => {
+    e.stopPropagation();
+    setActiveMenuQuizId(null);
+    const prompt = `Can you guide me Socratically through the concepts in "${quiz.topic}" (${quiz.difficulty} level) and help me practice?`;
+    navigate(`/instructor?prompt=${encodeURIComponent(prompt)}`);
+  };
+
+  const handleDeleteQuiz = async (e: React.MouseEvent, quizId: string) => {
+    e.stopPropagation();
+    setActiveMenuQuizId(null);
+    const confirmed = window.confirm(
+      'Are you sure you want to delete this quiz? All associated progress and questions will be permanently removed.'
+    );
+    if (!confirmed) return;
+
     try {
-      const data = await apiRequest<{ reply: string; toolExecutions: any[] }>('/api/instructor/chat', {
-        method: 'POST',
-        body: JSON.stringify({
-          message: `Please generate a 5-question intermediate quiz on "${generatingTopic}"`,
-          history: [],
-        }),
-      });
-
-      // Find the generated quiz ID from tool executions
-      const genTool = data.toolExecutions?.find((t) => t.name === 'generate_quiz');
-      if (genTool && genTool.result) {
-        const parsed = typeof genTool.result === 'string' ? JSON.parse(genTool.result) : genTool.result;
-        if (parsed.quiz_id) {
-          navigate(`/quizzes/${parsed.quiz_id}`);
-          return;
-        }
-      }
-      setGeneratingTopic('');
-      await fetchQuizzes();
+      await apiRequest(`/api/quizzes/${quizId}`, { method: 'DELETE' });
+      invalidateCache('/api/quizzes');
+      invalidateCache('/api/analytics/dashboard');
+      setQuizzes((prev) => prev.filter((q) => q.id !== quizId));
     } catch (err: any) {
-      alert(`Generation failed: ${err.message}`);
-    } finally {
-      setIsGenerating(false);
+      alert(`Failed to delete quiz: ${err.message}`);
     }
   };
 
+  const filteredQuizzes = quizzes.filter((q) => {
+    if (!searchQuery.trim()) return true;
+    const term = searchQuery.toLowerCase();
+    return (
+      q.topic.toLowerCase().includes(term) ||
+      q.difficulty.toLowerCase().includes(term)
+    );
+  });
+
   return (
-    <div className="max-w-5xl mx-auto w-full p-4 md:p-8 space-y-6 font-sans">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
-        <div>
-          <h2 className="text-2xl font-display font-extrabold text-[#2E1D5E] tracking-tight flex items-center gap-2.5">
-            <CheckSquare className="w-6 h-6 text-[#7A22E8]" />
-            <span>Quizzes Arena</span>
-          </h2>
-          <p className="text-xs text-slate-500 font-medium mt-1">
-            Attempt curriculum quizzes generated by the Socratic AI agent
-          </p>
-        </div>
+    <div className="h-full overflow-y-auto subtle-scroll">
+      <div className="max-w-5xl mx-auto w-full p-4 md:p-8 space-y-6 font-sans">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+          <div>
+            <h2 className="text-2xl font-display font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
+              <CheckSquare className="w-6 h-6 text-slate-800" />
+              <span>Quizzes Arena</span>
+            </h2>
+            <p className="text-xs text-slate-500 font-medium mt-1">
+              Attempt curriculum quizzes generated by the Socratic AI agent
+            </p>
+          </div>
 
-        {/* Quick Quiz Generator Form with Cognitive Prism pill styling */}
-        <form onSubmit={handleQuickGenerate} className="flex items-center gap-2">
-          <input
-            type="text"
-            value={generatingTopic}
-            onChange={(e) => setGeneratingTopic(e.target.value)}
-            placeholder="e.g. Thermodynamics, Linear Algebra..."
-            disabled={isGenerating}
-            className="px-4 py-2 text-xs bg-white border border-slate-200 rounded-full focus:outline-none focus:ring-2 focus:ring-[#7A22E8]/25 focus:border-[#7A22E8] w-56 sm:w-64"
-          />
-          <button
-            type="submit"
-            disabled={!generatingTopic.trim() || isGenerating}
-            className="btn-deezer-primary px-4 py-2 text-xs disabled:opacity-50"
-          >
-            {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-            <span>Generate</span>
-          </button>
-        </form>
-      </div>
-
-      {/* Quizzes Grid */}
-      {loading ? (
-        <div className="py-16 flex flex-col items-center justify-center text-slate-500 gap-2">
-          <Loader2 className="w-6 h-6 animate-spin text-[#7A22E8]" />
-          <p className="text-xs font-medium">Loading available quizzes...</p>
-        </div>
-      ) : quizzes.length === 0 ? (
-        <div className="glass-card p-12 text-center rounded-3xl">
-          <BookOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <h3 className="text-base font-display font-bold text-[#2E1D5E]">No quizzes generated yet</h3>
-          <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-            Use the input above or chat with the AI Instructor to generate your first custom quiz.
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {quizzes.map((quiz) => (
-            <div key={quiz.id} className="glass-card p-6 rounded-3xl flex flex-col justify-between hover:border-[#D8B4FE] transition">
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#7A22E8] bg-[#F3ECFF] px-3 py-0.5 rounded-full border border-[#D8B4FE] font-display">
-                    {quiz.difficulty}
-                  </span>
-                  <span className="text-xs font-mono font-semibold text-slate-400">
-                    {quiz.total_questions} Questions
-                  </span>
-                </div>
-                <h3 className="text-base font-display font-bold text-[#2E1D5E] line-clamp-2">{quiz.topic}</h3>
-                <p className="text-xs text-slate-400 mt-2 font-mono">
-                  Created {new Date(quiz.created_at).toLocaleDateString()}
-                </p>
-              </div>
-
-              <button
-                onClick={() => navigate(`/quizzes/${quiz.id}`)}
-                className="mt-6 w-full btn-deezer-secondary py-2 text-xs font-display"
-              >
-                <span>Attempt Quiz</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+          {/* Search Bar & AI Generate Button */}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="relative flex-1 sm:w-64">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search quizzes..."
+                className="w-full pl-8 pr-3.5 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900"
+              />
             </div>
-          ))}
+            <button
+              type="button"
+              onClick={handleGenerateRedirect}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors shadow-xs shrink-0 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Generate</span>
+            </button>
+          </div>
         </div>
-      )}
+
+        {/* Quizzes Grid */}
+        {loading ? (
+          <div className="py-16 flex flex-col items-center justify-center text-slate-500 gap-2">
+            <Loader2 className="w-6 h-6 animate-spin text-slate-700" />
+            <p className="text-xs font-medium">Loading available quizzes...</p>
+          </div>
+        ) : filteredQuizzes.length === 0 ? (
+          <div className="bg-white border border-slate-200 p-12 text-center rounded-2xl">
+            <BookOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+            <h3 className="text-base font-display font-bold text-slate-900">
+              {searchQuery ? 'No matching quizzes found' : 'No quizzes generated yet'}
+            </h3>
+            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+              {searchQuery
+                ? 'Try a different search keyword or click Generate to create a custom quiz.'
+                : 'Click Generate to chat with the AI Instructor and create your first custom quiz.'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredQuizzes.map((quiz) => (
+              <div
+                key={quiz.id}
+                className="bg-white border border-slate-200 p-5 rounded-2xl flex flex-col justify-between hover:border-slate-300 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 shadow-xs relative"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className={getSecondaryBadgeClass()}>
+                      {quiz.difficulty}
+                    </span>
+
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-mono font-semibold text-slate-400">
+                        {quiz.total_questions} Q/A
+                      </span>
+
+                      {/* 3-Dot Action Menu */}
+                      <div className="relative" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setActiveMenuQuizId(
+                              activeMenuQuizId === quiz.id ? null : quiz.id
+                            )
+                          }
+                          aria-label="Quiz Options"
+                          className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-slate-200"
+                        >
+                          <MoreVertical className="w-3.5 h-3.5" />
+                        </button>
+
+                        {activeMenuQuizId === quiz.id && (
+                          <div className="absolute right-0 top-full mt-1.5 w-40 bg-white border border-slate-200 rounded-xl shadow-lg py-1.5 z-30 animate-in fade-in zoom-in-95">
+                            <button
+                              type="button"
+                              onClick={(e) => handleEditWithAI(e, quiz)}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors text-left cursor-pointer"
+                            >
+                              <Bot className="w-3.5 h-3.5 text-indigo-600" />
+                              <span>Edit with AI</span>
+                            </button>
+
+                            <div className="my-1 border-t border-slate-100" />
+
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteQuiz(e, quiz.id)}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors text-left cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                              <span>Delete Quiz</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <h3 className="text-sm font-display font-bold text-slate-800 line-clamp-2">
+                    {quiz.topic}
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-2 font-mono">
+                    Created {new Date(quiz.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => navigate(`/quizzes/${quiz.id}`)}
+                  className="mt-6 w-full py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-slate-300 rounded-xl transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-[0.99] cursor-pointer"
+                >
+                  <span>Attempt Quiz</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
+

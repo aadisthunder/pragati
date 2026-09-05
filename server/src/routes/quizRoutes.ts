@@ -183,3 +183,77 @@ quizRouter.post('/:id/submit', async (req: AuthenticatedRequest, res: Response):
     res.status(500).json({ error: err.message });
   }
 });
+
+// Helper for cascading quiz deletion
+export async function deleteQuizCascade(
+  scopedClient: any,
+  quizId: string
+): Promise<{ success: boolean; message: string }> {
+  // 1. Find attempts for this quiz
+  const { data: attempts } = await scopedClient
+    .from('quiz_attempts')
+    .select('id')
+    .eq('quiz_id', quizId);
+
+  const attemptIds = (attempts || []).map((a: any) => a.id);
+
+  // 2. Find questions for this quiz
+  const { data: questions } = await scopedClient
+    .from('questions')
+    .select('id')
+    .eq('quiz_id', quizId);
+
+  const questionIds = (questions || []).map((q: any) => q.id);
+
+  // 3. Delete question telemetry by attempt_ids or question_ids
+  if (attemptIds.length > 0) {
+    await scopedClient
+      .from('question_telemetry')
+      .delete()
+      .in('attempt_id', attemptIds);
+  }
+  if (questionIds.length > 0) {
+    await scopedClient
+      .from('question_telemetry')
+      .delete()
+      .in('question_id', questionIds);
+  }
+
+  // 4. Delete quiz attempts
+  await scopedClient
+    .from('quiz_attempts')
+    .delete()
+    .eq('quiz_id', quizId);
+
+  // 5. Delete questions
+  await scopedClient
+    .from('questions')
+    .delete()
+    .eq('quiz_id', quizId);
+
+  // 6. Delete quiz record
+  const { error: quizError } = await scopedClient
+    .from('quizzes')
+    .delete()
+    .eq('id', quizId);
+
+  if (quizError) {
+    throw new Error(quizError.message);
+  }
+
+  return { success: true, message: 'Quiz deleted successfully' };
+}
+
+// DELETE /api/quizzes/:id - Delete a quiz and all associated data
+quizRouter.delete('/:id', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const scopedClient = createScopedClient(req.token!);
+  const quizId = req.params.id;
+
+  try {
+    const result = await deleteQuizCascade(scopedClient, quizId);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+

@@ -1,13 +1,35 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Mail, ArrowRight, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Mail, ArrowRight, CheckCircle2, AlertCircle, Loader2, Award } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
-  const { signInWithGoogle, signInWithEmailOtp } = useAuth();
+  const { user, signInWithGoogle, signInWithEmailOtp, signInAsJudge } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [judgeLoading, setJudgeLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user) {
+      navigate('/instructor', { replace: true });
+    }
+  }, [user, navigate]);
+
+  const handleJudgeSignIn = async () => {
+    try {
+      setJudgeLoading(true);
+      setError(null);
+      await signInAsJudge();
+      navigate('/instructor');
+    } catch (err: any) {
+      setError(err.message || 'Failed to sign in as Judge');
+    } finally {
+      setJudgeLoading(false);
+    }
+  };
 
   const handleGoogleSignIn = async () => {
     try {
@@ -36,23 +58,23 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-[#FAF8FD]">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-white">
       <div className="w-full max-w-md">
-        {/* Header with Official Cognitive Prism Logo */}
+        {/* Header with Official Logo */}
         <div className="text-center mb-8">
           <img
             src="/logo.png"
             alt="Pragati Logo"
-            className="w-16 h-16 rounded-3xl object-cover shadow-lg shadow-purple-500/25 mb-4 mx-auto border border-purple-200/80"
+            className="w-16 h-16 rounded-3xl object-cover shadow-sm mb-4 mx-auto border border-slate-200"
           />
-          <h1 className="text-3xl font-display font-extrabold text-[#2E1D5E] tracking-tight">Welcome to Pragati</h1>
+          <h1 className="text-3xl font-display font-extrabold text-slate-900 tracking-tight">Welcome to Pragati</h1>
           <p className="text-sm text-slate-500 mt-2 font-medium">
             AI-driven Socratic tutor and telemetry-backed learning arena
           </p>
         </div>
 
-        {/* Frosted Glass Auth Card */}
-        <div className="glass-card p-8 rounded-3xl shadow-sm">
+        {/* Auth Card */}
+        <div className="bg-white p-8 rounded-3xl shadow-xs border border-slate-200">
           {error && (
             <div className="flex items-center gap-2 p-3.5 mb-6 text-sm text-red-700 bg-red-50/80 border border-red-200/80 rounded-2xl">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -65,23 +87,58 @@ export const LoginPage: React.FC = () => {
               <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200/80 text-emerald-600 flex items-center justify-center mx-auto mb-4">
                 <CheckCircle2 className="w-6 h-6" />
               </div>
-              <h3 className="text-base font-display font-bold text-[#2E1D5E]">Check your inbox</h3>
+              <h3 className="text-base font-display font-bold text-slate-900">Check your inbox</h3>
               <p className="text-sm text-slate-600 mt-2">
                 We sent a passwordless sign-in link to <strong className="text-slate-900">{email}</strong>.
               </p>
               <button
                 onClick={() => setEmailSent(false)}
-                className="mt-6 text-xs font-semibold text-[#7A22E8] hover:text-[#6918C8] underline"
+                className="mt-6 text-xs font-semibold text-slate-900 hover:text-slate-700 underline"
               >
                 Sign in with a different email
               </button>
             </div>
           ) : (
-            <div className="space-y-6">
-              {/* Option 1: Google OAuth */}
+            <div className="space-y-5">
+              {/* Option 1: Hackathon Judge Quick Access (Highlighted Deep Indigo Theme) */}
+              <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-2xl text-center space-y-2.5 shadow-xs">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-100/90 border border-indigo-200 text-indigo-900 text-xs font-bold font-display">
+                  <Award className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Hackathon Judge Access</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleJudgeSignIn}
+                  disabled={judgeLoading || isSubmitting}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-semibold rounded-xl shadow-xs hover:shadow-md transition-all duration-150 font-display disabled:opacity-60 cursor-pointer"
+                >
+                  {judgeLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  ) : (
+                    <>
+                      <span>Instant Judge Login</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </>
+                  )}
+                </button>
+                <p className="text-[11px] text-indigo-700/80 font-mono">
+                  1-click demo account (no login credentials required)
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 my-1">
+                <div className="flex-1 border-t border-slate-200" />
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                  Or Continue As Student
+                </span>
+                <div className="flex-1 border-t border-slate-200" />
+              </div>
+
+              {/* Option 2: Google OAuth */}
               <button
+                type="button"
                 onClick={handleGoogleSignIn}
-                className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white hover:bg-slate-50 text-slate-800 text-sm font-semibold rounded-full border border-slate-200/90 shadow-sm transition-all duration-150 hover:shadow"
+                className="w-full flex items-center justify-center gap-3 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-800 text-xs font-semibold rounded-xl border border-slate-200 shadow-xs transition-all duration-150 cursor-pointer"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24">
                   <path
@@ -104,21 +161,22 @@ export const LoginPage: React.FC = () => {
                 <span>Continue with Google</span>
               </button>
 
-              <div className="relative flex items-center justify-center">
-                <div className="border-t border-slate-200/80 w-full" />
-                <span className="bg-white px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider relative">
-                  Or
+              <div className="flex items-center gap-3 my-1">
+                <div className="flex-1 border-t border-slate-200" />
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                  Or Email Magic Link
                 </span>
+                <div className="flex-1 border-t border-slate-200" />
               </div>
 
-              {/* Option 2: Passwordless Email Magic Link */}
+              {/* Option 3: Passwordless Email Magic Link */}
               <form onSubmit={handleEmailSignIn} className="space-y-4">
                 <div>
-                  <label htmlFor="email" className="block text-xs font-bold text-[#2E1D5E] uppercase tracking-wider mb-1.5 font-display">
+                  <label htmlFor="email" className="block text-xs font-bold text-slate-900 uppercase tracking-wider mb-1.5 font-display">
                     Email Address
                   </label>
                   <div className="relative">
-                    <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                    <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                     <input
                       id="email"
                       type="email"
@@ -126,22 +184,22 @@ export const LoginPage: React.FC = () => {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="student@university.edu"
-                      className="w-full pl-10 pr-4 py-2.5 bg-white/80 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#7A22E8]/30 focus:border-[#7A22E8] transition-all"
+                      className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 transition-all"
                     />
                   </div>
                 </div>
 
                 <button
                   type="submit"
-                  disabled={isSubmitting}
-                  className="w-full btn-deezer-primary py-3 text-sm disabled:opacity-60"
+                  disabled={isSubmitting || judgeLoading}
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors font-display disabled:opacity-60 cursor-pointer"
                 >
                   {isSubmitting ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <>
                       <span>Send Magic Link</span>
-                      <ArrowRight className="w-4 h-4" />
+                      <ArrowRight className="w-3.5 h-3.5" />
                     </>
                   )}
                 </button>
