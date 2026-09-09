@@ -21,6 +21,94 @@ export const getStudentAttemptsSchema = z.object({
   limit: z.number().min(1).max(20).default(5),
 });
 
+/**
+ * Robust JSON extractor for LLM-generated quiz payloads.
+ * Strips conversational preambles, markdown code fences, and repairs unclosed braces.
+ */
+export function extractQuizJson(rawContent: string): any {
+  if (!rawContent || typeof rawContent !== 'string') return null;
+
+  // Remove code fences
+  let text = rawContent.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+  // Find the first '{'
+  const startIdx = text.indexOf('{');
+  if (startIdx === -1) return null;
+
+  // 1. Try parsing from first '{' to last '}'
+  const lastBraceIdx = text.lastIndexOf('}');
+  if (lastBraceIdx > startIdx) {
+    try {
+      return JSON.parse(text.slice(startIdx, lastBraceIdx + 1));
+    } catch {}
+  }
+
+  // 2. Try parsing entire text from startIdx
+  const fullSlice = text.slice(startIdx).trim();
+  try {
+    return JSON.parse(fullSlice);
+  } catch {}
+
+  // 3. Balance unclosed brackets and braces
+  let openBraces = (fullSlice.match(/{/g) || []).length;
+  let closeBraces = (fullSlice.match(/}/g) || []).length;
+  let openBrackets = (fullSlice.match(/\[/g) || []).length;
+  let closeBrackets = (fullSlice.match(/\]/g) || []).length;
+
+  let repaired = fullSlice;
+  while (closeBrackets < openBrackets) {
+    repaired += ']';
+    closeBrackets++;
+  }
+  while (closeBraces < openBraces) {
+    repaired += '}';
+    closeBraces++;
+  }
+
+  try {
+    return JSON.parse(repaired);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Sanitizes and backfills tool arguments when an LLM invokes tools with partial or empty arguments.
+ */
+export function sanitizeToolArgs(toolName: string, rawArgs: any = {}, userMessage: string = ''): any {
+  const args = { ...(rawArgs || {}) };
+
+  if (toolName === 'generate_quiz') {
+    if (!args.topic || typeof args.topic !== 'string' || !args.topic.trim()) {
+      const topicMatch =
+        userMessage.match(/topic\s*:\s*([^,\.\n]+)/i) ||
+        userMessage.match(/(?:quiz|questions?|test)\s+(?:on|about)\s+([^,\.\n]+)/i) ||
+        userMessage.match(/on\s+([^,\.\n]+)/i);
+
+      if (topicMatch && topicMatch[1]) {
+        args.topic = topicMatch[1].trim();
+      } else {
+        args.topic = userMessage.trim();
+      }
+    }
+
+    if (!args.num_questions || typeof args.num_questions !== 'number') {
+      const numMatch = userMessage.match(/(\d+)\s*(?:questions?|-question)/i);
+      args.num_questions = numMatch ? parseInt(numMatch[1], 10) : 5;
+    }
+
+    if (!args.difficulty || typeof args.difficulty !== 'string') {
+      args.difficulty = 'intermediate';
+    }
+  } else if (toolName === 'get_student_attempts') {
+    if (!args.limit || typeof args.limit !== 'number') {
+      args.limit = 5;
+    }
+  }
+
+  return args;
+}
+
 export function createAgentTools(supabaseClient: SupabaseClient, userId: string, llm: ChatOpenAI) {
   const generateQuizTool = tool(
     async ({ topic, difficulty, num_questions }) => {
@@ -47,21 +135,14 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
 }`;
 
         const response = await llm.invoke(prompt);
-        let rawContent = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+        const rawContent = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
         
-        // Clean markdown fences if any
-        rawContent = rawContent.replace(/```json/gi, '').replace(/```/g, '').trim();
-        let parsed: any;
-        try {
-          parsed = JSON.parse(rawContent);
-        } catch {
-          let cleaned = rawContent.trim();
-          if (!cleaned.endsWith('}')) cleaned += '}';
-          try {
-            parsed = JSON.parse(cleaned);
-          } catch {
-            return 'Failed to parse generated quiz structure into valid JSON.';
-          }
+        const parsed = extractQuizJson(rawContent);
+        if (!parsed) {
+          return JSON.stringify({
+            action: 'ERROR',
+            error: 'Failed to parse generated quiz structure into valid JSON.',
+          });
         }
 
         const questionsList = Array.isArray(parsed?.questions)
@@ -71,7 +152,10 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
           : [];
 
         if (questionsList.length === 0) {
-          return 'Failed to generate quiz: LLM did not return a valid list of questions.';
+          return JSON.stringify({
+            action: 'ERROR',
+            error: 'Failed to generate quiz: LLM did not return a valid list of questions.',
+          });
         }
 
         // Save to Supabase
@@ -87,7 +171,10 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
           .single();
 
         if (quizError || !quiz) {
-          return `Failed to save quiz: ${quizError?.message || 'Unknown database error'}`;
+          return JSON.stringify({
+            action: 'ERROR',
+            error: `Failed to save quiz: ${quizError?.message || 'Unknown database error'}`,
+          });
         }
 
         const questionsToInsert = questionsList.map((q: any, idx: number) => ({
@@ -105,7 +192,10 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
           .insert(questionsToInsert);
 
         if (questionsError) {
-          return `Quiz created (${quiz.id}) but failed to insert questions: ${questionsError.message}`;
+          return JSON.stringify({
+            action: 'ERROR',
+            error: `Quiz created (${quiz.id}) but failed to insert questions: ${questionsError.message}`,
+          });
         }
 
         return JSON.stringify({
@@ -113,11 +203,14 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
           quiz_id: quiz.id,
           topic: quiz.topic,
           difficulty: quiz.difficulty,
-          total_questions: parsed.questions.length,
-          message: `Successfully generated a ${parsed.questions.length}-question quiz on "${topic}".`,
+          total_questions: questionsList.length,
+          message: `Successfully generated a ${questionsList.length}-question quiz on "${topic}".`,
         });
       } catch (err: any) {
-        return `Error generating quiz: ${err.message}`;
+        return JSON.stringify({
+          action: 'ERROR',
+          error: `Error generating quiz: ${err.message}`,
+        });
       }
     },
     {

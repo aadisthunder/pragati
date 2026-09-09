@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
@@ -6,9 +6,16 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { apiRequest, apiRequestCached, apiStreamRequest, getFromCache, invalidateCache } from '../api/client';
 import { TypewriterMessage } from '../components/chat/TypewriterMessage';
-import { interruptButtonStyles } from '../utils/markdownCards';
+import { interruptButtonStyles, CHIP_SUGGESTIONS } from '../utils/markdownCards';
 import {
-  Bot,
+  calculateTextareaHeight,
+  shouldSubmitOnEnter,
+  getUploadButtonClass,
+  getSuggestionChipsContainerClass,
+  handleModalBackdropClick,
+} from '../utils/theme';
+import { useTypewriterPlaceholder } from '../hooks/useTypewriterPlaceholder';
+import {
   Send,
   Plus,
   Camera,
@@ -17,6 +24,7 @@ import {
   CheckSquare,
   Loader2,
   ArrowRight,
+  AlertCircle,
 } from 'lucide-react';
 
 interface Message {
@@ -26,12 +34,11 @@ interface Message {
   animate?: boolean;
 }
 
-const WELCOME_MESSAGE: Message = {
-  role: 'assistant',
-  content:
-    'Hello! I am your Socratic AI Instructor. Ask me any conceptual question in STEM, upload a snapshot of a difficult problem, or ask me to generate a personalized practice quiz on any topic!',
-  animate: false,
-};
+const PLACEHOLDER_PHRASES = [
+  'Ask a doubt...',
+  'Request a quiz topic...',
+  'Review missed questions...',
+];
 
 export const InstructorPage: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -39,7 +46,10 @@ export const InstructorPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [showUploadSheet, setShowUploadSheet] = useState(false);
+  const [isClosingSheet, setIsClosingSheet] = useState(false);
   const [agentSteps, setAgentSteps] = useState<Array<{ phase: string; text: string; tool?: string }>>([]);
+
+  const animatedPlaceholder = useTypewriterPlaceholder(PLACEHOLDER_PHRASES, 50, 25, 2000);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const sessionId = searchParams.get('session');
@@ -47,6 +57,7 @@ export const InstructorPage: React.FC = () => {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const chatBottomRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const navigate = useNavigate();
 
@@ -67,15 +78,42 @@ export const InstructorPage: React.FC = () => {
     ]);
   };
 
+  const adjustTextareaHeight = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const minLines = 1;
+    const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
+    const maxLines = isDesktop ? 7 : 4;
+    const { height, overflowY } = calculateTextareaHeight(el.scrollHeight, 24, minLines, maxLines);
+    el.style.height = `${height}px`;
+    el.style.overflowY = overflowY;
+  }, [messages.length]);
+
   useEffect(() => {
-    if (sessionId === 'new') {
-      setMessages([WELCOME_MESSAGE]);
+    adjustTextareaHeight();
+  }, [input, adjustTextareaHeight]);
+
+  const handleOpenUploadSheet = () => {
+    setIsClosingSheet(false);
+    setShowUploadSheet(true);
+  };
+
+  const handleCloseUploadSheet = () => {
+    setIsClosingSheet(true);
+    setTimeout(() => {
+      setShowUploadSheet(false);
+      setIsClosingSheet(false);
+    }, 250);
+  };
+
+  useEffect(() => {
+    if (!sessionId || sessionId === 'new') {
+      setMessages([]);
       return;
     }
 
-    const endpoint = sessionId
-      ? `/api/instructor/sessions/${sessionId}/messages`
-      : '/api/instructor/history';
+    const endpoint = `/api/instructor/sessions/${sessionId}/messages`;
 
     // Check synchronous cache first to eliminate loading flash
     const cached = getFromCache<{ messages: Message[]; sessionId?: string }>(endpoint);
@@ -94,28 +132,52 @@ export const InstructorPage: React.FC = () => {
             }))
           );
         } else {
-          setMessages([WELCOME_MESSAGE]);
+          setMessages([]);
         }
       })
       .catch(() => {
-        setMessages([WELCOME_MESSAGE]);
+        setMessages([]);
       });
   }, [sessionId]);
 
-  // Handle incoming preloaded prompt (e.g. from Edit with AI in Quiz Arena)
+  // Handle incoming preloaded prompt (e.g. from Edit with AI in Quiz Arena or Tutor with AI in Analytics)
   useEffect(() => {
     const promptParam = searchParams.get('prompt');
     if (promptParam) {
       setInput(promptParam);
+      setTimeout(() => {
+        textareaRef.current?.focus();
+        adjustTextareaHeight();
+      }, 50);
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete('prompt');
       setSearchParams(nextParams, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, adjustTextareaHeight]);
 
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
+
+  // Close upload sheet on Escape key press with smooth slide-down
+  useEffect(() => {
+    if (!showUploadSheet) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleCloseUploadSheet();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showUploadSheet]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+    if (shouldSubmitOnEnter(e, isMobile)) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
 
   const handleSendMessage = async (textToSend?: string) => {
     const messageContent = textToSend || input;
@@ -203,7 +265,7 @@ export const InstructorPage: React.FC = () => {
     if (!file) return;
 
     e.target.value = '';
-    setShowUploadSheet(false);
+    handleCloseUploadSheet();
     setOcrLoading(true);
 
     const reader = new FileReader();
@@ -216,6 +278,10 @@ export const InstructorPage: React.FC = () => {
         });
 
         setInput(`Here is the question from my upload: "${data.extractedText}". Can you guide me through solving it step-by-step?`);
+        setTimeout(() => {
+          textareaRef.current?.focus();
+          adjustTextareaHeight();
+        }, 50);
       } catch (err: any) {
         alert(`OCR extraction failed: ${err.message}`);
       } finally {
@@ -244,206 +310,57 @@ export const InstructorPage: React.FC = () => {
         className="hidden"
       />
 
-      {/* Scrollable Message Feed with Header inside - pb-36 allows messages to scroll behind floating dock */}
-      <div className="flex-1 overflow-y-auto subtle-scroll px-4 md:px-6 pt-4 pb-36 space-y-4">
-        {/* Header - scrollable along with chat messages */}
-        <div className="flex items-center gap-3 pb-4 mb-2 border-b border-slate-200">
-          <div className="w-10 h-10 rounded-xl bg-white text-slate-800 flex items-center justify-center border border-slate-200 shadow-xs">
-            <Bot className="w-5 h-5" />
+      {/* Case 1: Centered Hero Layout on New/Empty Chat */}
+      {messages.length === 0 && !loading ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-4 max-w-2xl mx-auto w-full text-center space-y-6 animate-in fade-in duration-300">
+          <div className="space-y-3 flex flex-col items-center">
+            <img
+              src="/logo.png"
+              alt="Pragati Logo"
+              className="w-12 h-12 rounded-2xl object-cover border border-slate-200 shadow-xs mb-1"
+            />
+            <h2 className="text-2xl sm:text-3xl font-display font-extrabold text-slate-900 tracking-tight">
+              What would you like to learn today?
+            </h2>
           </div>
-          <div>
-            <h2 className="text-xl font-display font-extrabold text-slate-900 tracking-tight">AI Instructor</h2>
-            <p className="text-xs text-slate-500 font-medium">
-              Socratic tutor powered by Bedrock Mantle DeepSeek
-            </p>
-          </div>
-        </div>
 
-        {/* Chat Messages Feed */}
-        {messages.map((msg, idx) => {
-          const isUser = msg.role === 'user';
-          return (
-            <div
-              key={idx}
-              className={`w-full flex ${isUser ? 'justify-end' : 'justify-start'}`}
-            >
-              <div className={`max-w-2xl flex flex-col ${isUser ? 'items-end' : 'items-start'} space-y-3`}>
-                <div
-                  className={`p-4 rounded-2xl text-sm leading-relaxed ${
-                    isUser
-                      ? 'bg-slate-900 text-white rounded-tr-none shadow-xs'
-                      : 'bg-white text-slate-900 rounded-tl-none border border-slate-200 shadow-xs'
-                  }`}
-                >
-                  {isUser ? (
-                    <div className="prose prose-sm max-w-none text-white">
-                      <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-                        {msg.content}
-                      </ReactMarkdown>
-                    </div>
-                  ) : (
-                    <TypewriterMessage
-                      content={msg.content}
-                      animate={msg.animate}
-                      speedMs={12}
-                      onUpdate={() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' })}
-                    />
-                  )}
-                </div>
-
-                {/* Render In-Chat Interactive Quiz Card if tool was executed */}
-                {msg.tool_calls &&
-                  msg.tool_calls.map((tc, tcIdx) => {
-                    let parsedResult: any = null;
-                    try {
-                      parsedResult = typeof tc.result === 'string' ? JSON.parse(tc.result) : tc.result;
-                    } catch {}
-
-                    if (parsedResult && parsedResult.action === 'QUIZ_GENERATED') {
-                      return (
-                        <div
-                          key={tcIdx}
-                          className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs max-w-md animate-in fade-in duration-300"
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-[10px] font-bold text-slate-800 uppercase tracking-wider bg-white px-2.5 py-0.5 rounded-full border border-slate-200 font-display">
-                              Quiz Generated
-                            </span>
-                            <span className="text-xs font-semibold text-slate-500 capitalize">
-                              {parsedResult.difficulty} Difficulty
-                            </span>
-                          </div>
-                          <h4 className="text-sm font-display font-bold text-slate-900">{parsedResult.topic}</h4>
-                          <p className="text-xs text-slate-600 mt-1">
-                            Assessment with {parsedResult.total_questions} questions and granular dwell time tracking.
-                          </p>
-                          <button
-                            onClick={() => navigate(`/quizzes/${parsedResult.quiz_id}`)}
-                            className="mt-3 w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors shadow-xs font-display"
-                          >
-                            <CheckSquare className="w-3.5 h-3.5" />
-                            <span>Start Quiz Now</span>
-                            <ArrowRight className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      );
-                    }
-                    return null;
-                  })}
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Live Step-by-Step Grey Agent Telemetry - displayed outside of message grids */}
-        {loading && (
-          <div className="w-full flex justify-start py-1">
-            <div className="space-y-1.5 py-1 px-1">
-              {agentSteps.length > 0 ? (
-                agentSteps.map((step, sIdx) => {
-                  const isLatest = sIdx === agentSteps.length - 1;
-                  return (
-                    <div
-                      key={sIdx}
-                      className="flex items-center gap-2 text-xs font-mono text-slate-500 animate-in fade-in duration-150"
-                    >
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          isLatest ? 'bg-slate-600 animate-ping' : 'bg-slate-300'
-                        }`}
-                      />
-                      <span className={isLatest ? 'text-slate-700 font-semibold' : 'text-slate-400'}>
-                        {step.text}
-                      </span>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="flex items-center gap-2 text-xs font-mono text-slate-500 animate-in fade-in duration-150">
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-pulse" />
-                  <span>Thinking...</span>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-        <div ref={chatBottomRef} />
-      </div>
-
-      {/* Floating Prompt & Suggestions Dock - Pinned consistently regardless of scroll */}
-      <div className="absolute bottom-4 left-4 right-4 max-w-4xl mx-auto pointer-events-none z-20 flex flex-col gap-2">
-        {/* Floating Suggestions Chips directly above prompt (no 'SUGGESTIONS:' text label) */}
-        <div className="pointer-events-auto flex items-center gap-2 overflow-x-auto subtle-scroll py-1 px-0.5">
-          <button
-            type="button"
-            disabled={loading}
-            onClick={() => handleSendMessage("Generate a 3-question quiz on Calculus Derivatives")}
-            className="text-xs font-medium px-3 py-1.5 rounded-xl bg-white/95 backdrop-blur-xs border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-xs whitespace-nowrap flex-shrink-0 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+          {/* Centered Input Form with vertical center alignment */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSendMessage();
+            }}
+            className="w-full flex items-center gap-1.5 sm:gap-2 p-2 bg-white border border-slate-200 rounded-2xl shadow-lg transition-all focus-within:border-slate-400 focus-within:ring-2 focus-within:ring-slate-900/5 text-left"
           >
-            Create Calculus Quiz
-          </button>
-          <button
-            type="button"
-            disabled={loading}
-            onClick={() => handleSendMessage("What questions did I get wrong in my recent quiz and how can I fix them?")}
-            className="text-xs font-medium px-3 py-1.5 rounded-xl bg-white/95 backdrop-blur-xs border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-xs whitespace-nowrap flex-shrink-0 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Review Missed Questions
-          </button>
-          <button
-            type="button"
-            disabled={loading}
-            onClick={() => handleSendMessage("Explain the underlying concepts and intuition behind the last topic")}
-            className="text-xs font-medium px-3 py-1.5 rounded-xl bg-white/95 backdrop-blur-xs border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-xs whitespace-nowrap flex-shrink-0 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Explain Concept
-          </button>
-        </div>
-
-        {/* Floating Opaque Prompt Input Bar */}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSendMessage();
-          }}
-          className="pointer-events-auto flex items-center gap-2 p-1.5 bg-white border border-slate-200 rounded-2xl shadow-lg transition-all focus-within:border-slate-400"
-        >
-          {/* Plus button to open Camera / Gallery Action Sheet */}
-          <button
-            type="button"
-            disabled={ocrLoading || loading}
-            onClick={() => setShowUploadSheet(true)}
-            title="Upload Problem (Camera or Gallery)"
-            className="w-10 h-10 flex-shrink-0 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-600 hover:text-slate-900 transition-colors shadow-xs flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-          >
-            {ocrLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin text-slate-700" />
-            ) : (
-              <Plus className="w-4 h-4" />
-            )}
-          </button>
-
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={loading ? "AI Instructor is thinking..." : "Ask a doubt, request a quiz topic, or ask to review missed questions..."}
-            disabled={loading}
-            className="flex-1 px-3 py-2 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none transition disabled:bg-transparent disabled:text-slate-500"
-          />
-
-          {/* Dynamic Action Button: Interrupt Button when running, Send Button when idle */}
-          {loading ? (
+            {/* Borderless Plus Button */}
             <button
               type="button"
-              onClick={handleInterrupt}
-              title="Stop generation"
-              aria-label="Stop generation"
-              className={interruptButtonStyles.container}
+              disabled={ocrLoading || loading}
+              onClick={handleOpenUploadSheet}
+              title="Upload Problem (Camera or Gallery)"
+              className={getUploadButtonClass()}
             >
-              <span className={interruptButtonStyles.square} />
+              {ocrLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin text-slate-700" />
+              ) : (
+                <Plus className="w-5 h-5" />
+              )}
             </button>
-          ) : (
+
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                adjustTextareaHeight();
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder={animatedPlaceholder}
+              disabled={loading}
+              className="flex-1 px-2 sm:px-3 py-1 bg-white text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none resize-none transition disabled:bg-transparent disabled:text-slate-500 leading-normal max-h-32 sm:max-h-48 subtle-scroll"
+            />
+
             <button
               type="submit"
               disabled={!input.trim()}
@@ -453,20 +370,295 @@ export const InstructorPage: React.FC = () => {
             >
               <Send className="w-4 h-4" />
             </button>
-          )}
-        </form>
-      </div>
+          </form>
 
-      {/* Bottom Action Sheet for Camera / Gallery rendered via Portal */}
+          {/* Centered Suggestion Chips without scrollbar */}
+          <div className={getSuggestionChipsContainerClass()}>
+            {CHIP_SUGGESTIONS.map((chip, idx) => (
+              <button
+                key={idx}
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  setInput(chip.prompt);
+                  setTimeout(() => {
+                    textareaRef.current?.focus();
+                    adjustTextareaHeight();
+                  }, 20);
+                }}
+                className="text-xs font-medium px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-xs whitespace-nowrap flex-shrink-0 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        /* Case 2: Conversation Message Feed & Floating Bottom Dock */
+        <>
+          {/* Scrollable Message Feed - pb-40 allows messages to scroll behind floating dock, pt-16 provides mobile clearance below floating buttons */}
+          <div className="flex-1 overflow-y-auto subtle-scroll px-3 sm:px-4 md:px-6 pt-16 sm:pt-4 pb-40 space-y-4">
+            {/* Chat Messages Feed */}
+            {messages.map((msg, idx) => {
+              const isUser = msg.role === 'user';
+              return (
+                <div
+                  key={idx}
+                  className={`w-full flex ${isUser ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div className={`max-w-2xl flex flex-col ${isUser ? 'items-end' : 'items-start'} space-y-3`}>
+                    <div
+                      className={`p-4 rounded-2xl text-sm leading-relaxed ${
+                        isUser
+                          ? 'bg-slate-900 text-white rounded-tr-none shadow-xs'
+                          : 'bg-white text-slate-900 rounded-tl-none shadow-xs'
+                      }`}
+                    >
+                      {isUser ? (
+                        <div className="prose prose-sm max-w-none text-white">
+                          <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                            {msg.content}
+                          </ReactMarkdown>
+                        </div>
+                      ) : (
+                        <TypewriterMessage
+                          content={msg.content}
+                          animate={msg.animate}
+                          speedMs={12}
+                          onUpdate={() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                        />
+                      )}
+                    </div>
+
+                    {/* Render In-Chat Interactive Quiz Card if tool was executed */}
+                    {msg.tool_calls &&
+                      msg.tool_calls.map((tc, tcIdx) => {
+                        let parsedResult: any = null;
+                        try {
+                          parsedResult = typeof tc.result === 'string' ? JSON.parse(tc.result) : tc.result;
+                        } catch {}
+
+                        if (parsedResult && parsedResult.action === 'QUIZ_GENERATED') {
+                          return (
+                            <div
+                              key={tcIdx}
+                              className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs max-w-md animate-in fade-in duration-300"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-[10px] font-bold text-slate-800 uppercase tracking-wider bg-white px-2.5 py-0.5 rounded-full border border-slate-200 font-display">
+                                  Quiz Generated
+                                </span>
+                                <span className="text-xs font-semibold text-slate-500 capitalize">
+                                  {parsedResult.difficulty} Difficulty
+                                </span>
+                              </div>
+                              <h4 className="text-sm font-display font-bold text-slate-900">{parsedResult.topic}</h4>
+                              <p className="text-xs text-slate-600 mt-1">
+                                Assessment with {parsedResult.total_questions} questions and granular dwell time tracking.
+                              </p>
+                              <button
+                                onClick={() => navigate(`/quizzes/${parsedResult.quiz_id}`)}
+                                className="mt-3 w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors shadow-xs font-display"
+                              >
+                                <CheckSquare className="w-3.5 h-3.5" />
+                                <span>Start Quiz Now</span>
+                                <ArrowRight className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          );
+                        }
+
+                        if (parsedResult && (parsedResult.action === 'ERROR' || parsedResult.error)) {
+                          return (
+                            <div
+                              key={tcIdx}
+                              className="bg-rose-50/80 border border-rose-200 p-4 rounded-2xl max-w-md animate-in fade-in duration-200 text-xs text-rose-900 space-y-2 shadow-xs"
+                            >
+                              <div className="flex items-center gap-2 font-display font-semibold text-rose-800">
+                                <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+                                <span>Quiz Generation Notice</span>
+                              </div>
+                              <p className="text-rose-700 leading-relaxed font-sans">
+                                {parsedResult.error || 'Failed to complete quiz generation.'}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setInput('generate a quiz to test my understanding on topic : ');
+                                  setTimeout(() => {
+                                    textareaRef.current?.focus();
+                                    adjustTextareaHeight();
+                                  }, 20);
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-rose-300 text-rose-700 hover:bg-rose-100/60 rounded-xl font-medium transition cursor-pointer shadow-xs"
+                              >
+                                <span>Retry Prompt</span>
+                              </button>
+                            </div>
+                          );
+                        }
+
+                        return null;
+                      })}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Live Step-by-Step Grey Agent Telemetry & Prominent Quiz Generation Card */}
+            {loading && (
+              <div className="w-full flex flex-col items-start gap-2.5 py-1">
+                {agentSteps.some(
+                  (s) => s.tool === 'generate_quiz' || s.text.toLowerCase().includes('generate_quiz')
+                ) && (
+                  <div className="bg-white border border-slate-300 p-4 rounded-2xl shadow-xs max-w-md w-full animate-in fade-in duration-200 space-y-2">
+                    <div className="flex items-center gap-2.5">
+                      <Loader2 className="w-4 h-4 animate-spin text-slate-800" />
+                      <span className="text-xs font-display font-bold text-slate-900 tracking-tight">
+                        Generating Assessment...
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 leading-relaxed font-sans">
+                      Crafting curriculum questions, conceptual hints, and step-by-step rationales. Input is paused while your quiz is being created.
+                    </p>
+                  </div>
+                )}
+
+                <div className="space-y-1.5 py-1 px-1">
+                  {agentSteps.length > 0 ? (
+                    agentSteps.map((step, sIdx) => {
+                      const isLatest = sIdx === agentSteps.length - 1;
+                      return (
+                        <div
+                          key={sIdx}
+                          className="flex items-center gap-2 text-xs font-mono text-slate-500 animate-in fade-in duration-150"
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              isLatest ? 'bg-slate-600 animate-ping' : 'bg-slate-300'
+                            }`}
+                          />
+                          <span className={isLatest ? 'text-slate-700 font-semibold' : 'text-slate-400'}>
+                            {step.text}
+                          </span>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="flex items-center gap-2 text-xs font-mono text-slate-500 animate-in fade-in duration-150">
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-pulse" />
+                      <span>Thinking...</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            <div ref={chatBottomRef} />
+          </div>
+
+          {/* Floating Prompt & Suggestions Dock - Pinned consistently regardless of scroll */}
+          <div className="absolute bottom-2 left-2 right-2 sm:bottom-4 sm:left-4 sm:right-4 max-w-4xl mx-auto pointer-events-none z-20 flex flex-col gap-1.5 sm:gap-2">
+            {/* Floating Suggestions Chips directly above prompt with no-scrollbar */}
+            <div className={getSuggestionChipsContainerClass()}>
+              {CHIP_SUGGESTIONS.map((chip, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  disabled={loading}
+                  onClick={() => {
+                    setInput(chip.prompt);
+                    setTimeout(() => {
+                      textareaRef.current?.focus();
+                      adjustTextareaHeight();
+                    }, 20);
+                  }}
+                  className="text-xs font-medium px-2.5 sm:px-3 py-1.5 rounded-xl bg-white/95 backdrop-blur-xs border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-xs whitespace-nowrap flex-shrink-0 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {chip.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Floating Opaque Prompt Input Bar */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSendMessage();
+              }}
+              className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 p-1.5 bg-white border border-slate-200 rounded-2xl shadow-lg transition-all focus-within:border-slate-400 focus-within:ring-2 focus-within:ring-slate-900/5"
+            >
+              {/* Borderless Plus button */}
+              <button
+                type="button"
+                disabled={ocrLoading || loading}
+                onClick={handleOpenUploadSheet}
+                title="Upload Problem (Camera or Gallery)"
+                className={getUploadButtonClass()}
+              >
+                {ocrLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-slate-700" />
+                ) : (
+                  <Plus className="w-5 h-5" />
+                )}
+              </button>
+
+              <textarea
+                ref={textareaRef}
+                rows={1}
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  adjustTextareaHeight();
+                }}
+                onKeyDown={handleKeyDown}
+                placeholder={loading ? "AI Instructor is thinking..." : animatedPlaceholder}
+                disabled={loading}
+                className="flex-1 px-2 sm:px-3 py-1 bg-white text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none resize-none transition disabled:bg-transparent disabled:text-slate-500 leading-normal max-h-32 sm:max-h-48 subtle-scroll"
+              />
+
+              {/* Dynamic Action Button: Interrupt Button when running, Send Button when idle */}
+              {loading ? (
+                <button
+                  type="button"
+                  onClick={handleInterrupt}
+                  title="Stop generation"
+                  aria-label="Stop generation"
+                  className={interruptButtonStyles.container}
+                >
+                  <span className={interruptButtonStyles.square} />
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!input.trim()}
+                  title="Send Message"
+                  aria-label="Send Message"
+                  className="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-xl bg-slate-900 hover:bg-slate-800 text-white shadow-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98] cursor-pointer"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+              )}
+            </form>
+          </div>
+        </>
+      )}
+
+      {/* Bottom Action Sheet for Camera / Gallery with smooth slide-up & slide-down */}
       {showUploadSheet &&
         typeof document !== 'undefined' &&
         createPortal(
           <div
-            className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-end justify-center sm:items-center p-0 sm:p-4 animate-in fade-in duration-150"
-            onClick={() => setShowUploadSheet(false)}
+            className={`fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-end justify-center sm:items-center p-0 sm:p-4 transition-opacity duration-250 cursor-pointer ${
+              isClosingSheet ? 'opacity-0' : 'opacity-100 animate-in fade-in duration-200'
+            }`}
+            onClick={(e) => handleModalBackdropClick(e, handleCloseUploadSheet)}
           >
             <div
-              className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-slate-200/90 animate-in slide-in-from-bottom-4 duration-200"
+              className={`w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-slate-200/90 cursor-default transition-all duration-250 ${
+                isClosingSheet
+                  ? 'translate-y-full sm:translate-y-4 sm:opacity-0'
+                  : 'translate-y-0 sm:translate-y-0 sm:opacity-100 animate-in slide-in-from-bottom-6 duration-250'
+              }`}
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
@@ -476,7 +668,7 @@ export const InstructorPage: React.FC = () => {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setShowUploadSheet(false)}
+                  onClick={handleCloseUploadSheet}
                   className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
                 >
                   <X className="w-4 h-4" />
@@ -487,7 +679,10 @@ export const InstructorPage: React.FC = () => {
                 {/* Option 1: Camera */}
                 <button
                   type="button"
-                  onClick={() => cameraInputRef.current?.click()}
+                  onClick={() => {
+                    handleCloseUploadSheet();
+                    cameraInputRef.current?.click();
+                  }}
                   className="w-full flex items-center gap-4 p-4 rounded-2xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all text-left group cursor-pointer"
                 >
                   <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-800 group-hover:bg-slate-900 group-hover:text-white flex items-center justify-center transition-colors shadow-xs">
@@ -504,7 +699,10 @@ export const InstructorPage: React.FC = () => {
                 {/* Option 2: Gallery / Files */}
                 <button
                   type="button"
-                  onClick={() => galleryInputRef.current?.click()}
+                  onClick={() => {
+                    handleCloseUploadSheet();
+                    galleryInputRef.current?.click();
+                  }}
                   className="w-full flex items-center gap-4 p-4 rounded-2xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all text-left group cursor-pointer"
                 >
                   <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-800 group-hover:bg-slate-900 group-hover:text-white flex items-center justify-center transition-colors shadow-xs">
@@ -518,14 +716,6 @@ export const InstructorPage: React.FC = () => {
                   </div>
                 </button>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setShowUploadSheet(false)}
-                className="mt-4 w-full py-2.5 text-xs font-semibold text-slate-500 hover:text-slate-800 rounded-xl transition cursor-pointer"
-              >
-                Cancel
-              </button>
             </div>
           </div>,
           document.body

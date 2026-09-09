@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiRequestCached, getFromCache } from '../api/client';
+import { apiRequest, apiRequestCached, getFromCache, invalidateCache } from '../api/client';
 import {
   ResponsiveContainer,
   LineChart,
@@ -22,7 +22,10 @@ import {
   ArrowRight,
   Loader2,
   BookOpen,
+  Trash2,
 } from 'lucide-react';
+import { buildTutorMissedPrompt } from '../utils/markdownCards';
+import { getResponsivePageContainerClass, formatDeltaBadge, getPermanentCardClass } from '../utils/theme';
 
 const CHART_PALETTE = ['#0F172A', '#334155', '#475569', '#64748B', '#94A3B8'];
 
@@ -30,6 +33,7 @@ export const AnalyticsPage: React.FC = () => {
   const cachedInitial = getFromCache<any>('/api/analytics/dashboard');
   const [data, setData] = useState<any>(cachedInitial || null);
   const [loading, setLoading] = useState(!cachedInitial);
+  const [clearingMissed, setClearingMissed] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -41,16 +45,49 @@ export const AnalyticsPage: React.FC = () => {
         setData(res);
         setLoading(false);
       })
-      .catch((err) => {
-        console.error('Failed to load analytics', err);
+      .catch(() => {
         setLoading(false);
       });
   }, []);
 
-  if (loading) {
+  const handleDeleteMissed = async (id: string) => {
+    // Optimistic UI update
+    setData((prev: any) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        missed_questions: (prev.missed_questions || []).filter((q: any) => q.id !== id),
+      };
+    });
+    try {
+      await apiRequest(`/api/analytics/missed-questions/${id}`, { method: 'DELETE' });
+      invalidateCache('/api/analytics');
+    } catch (err) {
+      console.error('Failed to delete missed question:', err);
+    }
+  };
+
+  const handleClearAllMissed = async () => {
+    if (!window.confirm('Are you sure you want to clear all questions to review?')) return;
+    setClearingMissed(true);
+    setData((prev: any) => {
+      if (!prev) return prev;
+      return { ...prev, missed_questions: [] };
+    });
+    try {
+      await apiRequest('/api/analytics/missed-questions', { method: 'DELETE' });
+      invalidateCache('/api/analytics');
+    } catch (err) {
+      console.error('Failed to clear all missed questions:', err);
+    } finally {
+      setClearingMissed(false);
+    }
+  };
+
+  if (loading && !data) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-slate-700" />
+      <div className="h-full w-full flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-slate-800" />
       </div>
     );
   }
@@ -61,6 +98,9 @@ export const AnalyticsPage: React.FC = () => {
   const recentAttempts = data?.recent_attempts || [];
   const missedQuestions = data?.missed_questions || [];
 
+  const ratingBadge = formatDeltaBadge(metrics?.rating_delta);
+  const accuracyBadge = formatDeltaBadge(metrics?.accuracy_delta, true);
+
   // Format curve data
   const chartData = recentAttempts.map((att: any, idx: number) => ({
     attempt: `Quiz ${idx + 1}`,
@@ -69,63 +109,76 @@ export const AnalyticsPage: React.FC = () => {
   }));
 
   const handleTutorMissed = (q: any) => {
-    navigate('/instructor', {
-      state: {
-        autoPrompt: `I struggled with this question on ${q.topic}: "${q.prompt}". My choice was ${q.selected_answer || 'none (skipped)'}, but the correct answer is ${q.correct_answer}. Can you teach me the underlying concepts step-by-step?`,
-      },
-    });
+    const prompt = buildTutorMissedPrompt(q);
+    navigate(`/instructor?session=new&prompt=${encodeURIComponent(prompt)}`);
   };
 
   return (
-    <div className="h-full overflow-y-auto subtle-scroll">
-      <div className="max-w-5xl mx-auto w-full p-4 md:p-8 space-y-6 font-sans">
+    <div className="h-full w-full max-w-full overflow-y-auto overflow-x-hidden subtle-scroll min-w-0">
+      <div className={getResponsivePageContainerClass()}>
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-200">
-        <div>
-          <h2 className="text-2xl font-display font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
-            <BarChart3 className="w-6 h-6 text-slate-800" />
-            <span>Student Performance Analytics</span>
-          </h2>
-          <p className="text-xs text-slate-500 font-medium mt-1">
-            Cognitive telemetry, dwell time distribution, and topic mastery curves
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+          <div className="w-full sm:w-auto">
+            <div className="pl-14 sm:pl-0 min-h-[42px] flex items-center">
+              <h2 className="text-xl sm:text-2xl font-display font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
+                <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 text-slate-800" />
+                <span>Student Analytics</span>
+              </h2>
+            </div>
+            <p className="text-xs text-slate-500 font-medium mt-1">
+              Cognitive telemetry, dwell time distribution, and topic mastery curves
+            </p>
+          </div>
         </div>
-      </div>
 
-      {/* Metric Cards Grid with Micro-Hover Lift */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+      {/* Metric Cards Grid with Permanent Crisp Drop Shadows & Delta Indicators */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 min-w-0">
+        <div className={`${getPermanentCardClass()} p-4 sm:p-5 min-w-0`}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-500 font-display">Skill Rating</span>
-            <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-800 flex items-center justify-center border border-slate-200 shadow-xs">
+            <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-800 flex items-center justify-center border border-slate-200 shadow-xs shrink-0">
               <Award className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-extrabold text-slate-900 font-mono mt-3">
-            {profile?.skill_rating || 1200}
-          </p>
+          <div className="flex items-baseline gap-2 mt-3 flex-wrap">
+            <p className="text-2xl font-extrabold text-slate-900 font-mono">
+              {profile?.skill_rating || 1200}
+            </p>
+            {ratingBadge && (
+              <span className={`text-2xl font-extrabold font-mono ${ratingBadge.colorClass}`}>
+                {ratingBadge.text}
+              </span>
+            )}
+          </div>
           <span className="text-[11px] font-semibold text-slate-400 mt-1 block">Dynamic ELO score</span>
         </div>
 
-        <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+        <div className={`${getPermanentCardClass()} p-4 sm:p-5 min-w-0`}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-500 font-display">Overall Accuracy</span>
-            <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-800 flex items-center justify-center border border-slate-200 shadow-xs">
+            <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-800 flex items-center justify-center border border-slate-200 shadow-xs shrink-0">
               <Target className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-extrabold text-slate-900 font-mono mt-3">
-            {metrics?.overall_accuracy || 0}%
-          </p>
+          <div className="flex items-baseline gap-2 mt-3 flex-wrap">
+            <p className="text-2xl font-extrabold text-slate-900 font-mono">
+              {metrics?.overall_accuracy || 0}%
+            </p>
+            {accuracyBadge && (
+              <span className={`text-2xl font-extrabold font-mono ${accuracyBadge.colorClass}`}>
+                {accuracyBadge.text}
+              </span>
+            )}
+          </div>
           <span className="text-[11px] font-semibold text-slate-400 mt-1 block">
             Across {metrics?.total_attempts || 0} attempts
           </span>
         </div>
 
-        <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+        <div className={`${getPermanentCardClass()} p-4 sm:p-5 min-w-0`}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-500 font-display">Avg Question Dwell</span>
-            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200/60 shadow-xs">
+            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200/60 shadow-xs shrink-0">
               <Clock className="w-4 h-4" />
             </div>
           </div>
@@ -135,10 +188,10 @@ export const AnalyticsPage: React.FC = () => {
           <span className="text-[11px] font-semibold text-slate-400 mt-1 block">Active deliberation</span>
         </div>
 
-        <div className="bg-white border border-slate-200/80 p-5 rounded-2xl shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+        <div className={`${getPermanentCardClass()} p-4 sm:p-5 min-w-0`}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-500 font-display">Total Practice Time</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-200/60 shadow-xs">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-200/60 shadow-xs shrink-0">
               <BookOpen className="w-4 h-4" />
             </div>
           </div>
@@ -152,15 +205,15 @@ export const AnalyticsPage: React.FC = () => {
       </div>
 
       {/* Accuracy & Speed Performance Curve */}
-      <div className="bg-white border border-slate-200/80 p-6 rounded-2xl space-y-4 shadow-xs hover:shadow-sm transition-all duration-200">
+      <div className={`${getPermanentCardClass()} p-4 sm:p-6 space-y-4 min-w-0 overflow-hidden`}>
         <div className="flex items-center justify-between">
           <h3 className="text-base font-display font-bold text-slate-900">Quiz Accuracy Progression Curve</h3>
           <span className="text-xs font-mono font-semibold text-slate-400">Past Attempts</span>
         </div>
 
         {chartData.length > 0 ? (
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-64 w-full min-w-0 overflow-hidden">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <LineChart data={chartData} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
                 <XAxis dataKey="attempt" tick={{ fontSize: 11, fill: '#64748B' }} />
@@ -202,9 +255,9 @@ export const AnalyticsPage: React.FC = () => {
       </div>
 
       {/* Topic Mastery Animated Bar Chart & Missed Questions Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-w-0">
         {/* Topic Mastery - Animated Bar Chart */}
-        <div className="bg-white border border-slate-200 p-6 rounded-2xl space-y-4 shadow-xs hover:shadow-sm transition-all duration-200">
+        <div className={`${getPermanentCardClass()} p-4 sm:p-6 space-y-4 min-w-0 overflow-hidden`}>
           <div className="flex items-center justify-between">
             <h3 className="text-base font-display font-bold text-slate-900">Curriculum Topic Mastery</h3>
             <span className="text-xs font-mono font-semibold text-slate-400">Mastery %</span>
@@ -221,8 +274,8 @@ export const AnalyticsPage: React.FC = () => {
               </p>
             </div>
           ) : (
-            <div className="h-60 w-full">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-60 w-full min-w-0 overflow-hidden">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <BarChart
                   data={topicMastery}
                   margin={{ top: 10, right: 10, left: -20, bottom: 25 }}
@@ -271,13 +324,27 @@ export const AnalyticsPage: React.FC = () => {
         </div>
 
         {/* Missed & Skipped Questions with Direct AI Tutor Button */}
-        <div className="bg-white border border-slate-200/80 p-6 rounded-2xl space-y-4 shadow-xs hover:shadow-sm transition-all duration-200">
+        <div className={`${getPermanentCardClass()} p-4 sm:p-6 space-y-4 min-w-0 overflow-hidden`}>
           <div className="flex items-center justify-between">
             <h3 className="text-base font-display font-bold text-slate-900 flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-amber-600" />
               <span>Questions to Review</span>
             </h3>
-            <span className="text-xs font-semibold text-slate-400">Struggled Concepts</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-400 hidden sm:inline">Struggled Concepts</span>
+              {missedQuestions.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearAllMissed}
+                  disabled={clearingMissed}
+                  className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg border border-slate-200 hover:border-rose-200 transition-colors cursor-pointer disabled:opacity-50 font-display"
+                  title="Clear all questions to review"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Clear All</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {missedQuestions.length === 0 ? (
@@ -292,9 +359,20 @@ export const AnalyticsPage: React.FC = () => {
                     <span className="text-[10px] font-bold text-slate-700 bg-slate-50 px-2.5 py-0.5 rounded-full border border-slate-200 font-display">
                       {q.topic}
                     </span>
-                    <span className="text-[11px] font-mono text-slate-400">
-                      {q.dwell_time_sec}s dwell time
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-mono text-slate-400">
+                        {q.dwell_time_sec}s dwell time
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMissed(q.id)}
+                        aria-label="Dismiss question"
+                        title="Dismiss question"
+                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   <p className="text-xs font-medium text-slate-800 line-clamp-2">{q.prompt}</p>

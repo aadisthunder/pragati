@@ -2,6 +2,8 @@ import { Router, Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/authMiddleware.js';
 import { createScopedClient } from '../config/supabase.js';
 
+import { getRatingDelta, calculateCumulativeAccuracyDelta } from '../services/analyticsService.js';
+
 export const analyticsRouter = Router();
 
 // GET /api/analytics/dashboard - Aggregate performance and missed questions
@@ -45,6 +47,13 @@ analyticsRouter.get('/dashboard', async (req: AuthenticatedRequest, res: Respons
       ? Number((totalTimeSec / totalQuestions).toFixed(1)) 
       : 0;
 
+    // Recent deltas for Skill Rating and Cumulative Accuracy
+    const latestAttempt = attemptsList.length > 0 ? attemptsList[attemptsList.length - 1] : null;
+    const ratingDelta = latestAttempt
+      ? getRatingDelta(latestAttempt.accuracy_pct, (latestAttempt.quizzes as any)?.difficulty || 'intermediate')
+      : null;
+    const accuracyDelta = calculateCumulativeAccuracyDelta(attemptsList);
+
     // 3. Topic breakdown
     const topicMap: Record<string, { attempts: number; score: number; total: number }> = {};
     for (const att of attemptsList) {
@@ -75,6 +84,7 @@ analyticsRouter.get('/dashboard', async (req: AuthenticatedRequest, res: Respons
       question_id: m.question_id,
       topic: (m.questions as any)?.quizzes?.topic || 'General',
       prompt: (m.questions as any)?.prompt,
+      options: (m.questions as any)?.options || [],
       selected_answer: m.selected_answer,
       correct_answer: (m.questions as any)?.correct_answer,
       explanation: (m.questions as any)?.explanation,
@@ -94,8 +104,10 @@ analyticsRouter.get('/dashboard', async (req: AuthenticatedRequest, res: Respons
         total_attempts: totalAttempts,
         total_questions_answered: totalQuestions,
         overall_accuracy: overallAccuracy,
+        accuracy_delta: accuracyDelta,
         avg_dwell_time_sec: avgDwellTimeSec,
         total_time_spent_min: Math.round(totalTimeSec / 60),
+        rating_delta: ratingDelta,
       },
       topic_mastery: topicMastery,
       recent_attempts: attemptsList.slice(-10),
@@ -105,3 +117,45 @@ analyticsRouter.get('/dashboard', async (req: AuthenticatedRequest, res: Respons
     res.status(500).json({ error: err.message });
   }
 });
+
+// DELETE /api/analytics/missed-questions/:id - Delete single missed question review item
+analyticsRouter.delete('/missed-questions/:id', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const scopedClient = createScopedClient(req.token!);
+  const userId = req.user!.id;
+  const { id } = req.params;
+
+  try {
+    const { error } = await scopedClient
+      .from('question_telemetry')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    if (error) throw error;
+
+    res.json({ success: true, id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/analytics/missed-questions - Clear all missed/skipped question review items for user
+analyticsRouter.delete('/missed-questions', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const scopedClient = createScopedClient(req.token!);
+  const userId = req.user!.id;
+
+  try {
+    const { error } = await scopedClient
+      .from('question_telemetry')
+      .delete()
+      .eq('user_id', userId)
+      .or('is_correct.eq.false,is_skipped.eq.true');
+
+    if (error) throw error;
+
+    res.json({ success: true, message: 'All missed questions cleared' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+

@@ -1,29 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Mail, ArrowRight, CheckCircle2, AlertCircle, Loader2, Award } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const { user, signInWithGoogle, signInWithEmailOtp, signInAsJudge } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [judgeLoading, setJudgeLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const destination = (location.state as any)?.from?.pathname || '/instructor';
+
   useEffect(() => {
     if (user) {
-      navigate('/instructor', { replace: true });
+      navigate(destination, { replace: true });
     }
-  }, [user, navigate]);
+  }, [user, navigate, destination]);
 
   const handleJudgeSignIn = async () => {
     try {
       setJudgeLoading(true);
       setError(null);
       await signInAsJudge();
-      navigate('/instructor');
+      navigate(destination);
     } catch (err: any) {
       setError(err.message || 'Failed to sign in as Judge');
     } finally {

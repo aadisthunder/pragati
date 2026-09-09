@@ -64,23 +64,55 @@ export function calculateAttemptSummary(answers: QuestionTelemetryInput[]): Atte
   };
 }
 
-export function calculateUpdatedRating(
-  currentRating: number,
+export function getRatingDelta(
   accuracyPct: number,
   difficulty: string = 'intermediate'
 ): number {
   const diffMultiplier = difficulty === 'advanced' ? 1.5 : difficulty === 'beginner' ? 0.75 : 1.0;
   
-  let change = 0;
   if (accuracyPct >= 80) {
-    change = Math.round(25 * diffMultiplier);
+    return Math.round(25 * diffMultiplier);
   } else if (accuracyPct >= 60) {
-    change = Math.round(10 * diffMultiplier);
+    return Math.round(10 * diffMultiplier);
   } else if (accuracyPct <= 30) {
-    change = Math.round(-20 * diffMultiplier);
+    return Math.round(-20 * diffMultiplier);
   } else if (accuracyPct <= 50) {
-    change = Math.round(-10 * diffMultiplier);
+    return Math.round(-10 * diffMultiplier);
   }
+  return 0;
+}
 
+export function calculateUpdatedRating(
+  currentRating: number,
+  accuracyPct: number,
+  difficulty: string = 'intermediate'
+): number {
+  const change = getRatingDelta(accuracyPct, difficulty);
   return Math.max(800, currentRating + change);
 }
+
+export function calculateCumulativeAccuracyDelta(
+  attempts: Array<{ score: number; total_questions: number }>
+): number | null {
+  if (!attempts || attempts.length < 2) {
+    return null;
+  }
+
+  let prevScore = 0;
+  let prevQuestions = 0;
+  for (let i = 0; i < attempts.length - 1; i++) {
+    prevScore += attempts[i].score;
+    prevQuestions += attempts[i].total_questions;
+  }
+
+  if (prevQuestions === 0) return null;
+  const prevAccuracy = Number(((prevScore / prevQuestions) * 100).toFixed(1));
+
+  const totalScore = prevScore + attempts[attempts.length - 1].score;
+  const totalQuestions = prevQuestions + attempts[attempts.length - 1].total_questions;
+  if (totalQuestions === 0) return null;
+  const currentAccuracy = Number(((totalScore / totalQuestions) * 100).toFixed(1));
+
+  return Number((currentAccuracy - prevAccuracy).toFixed(1));
+}
+

@@ -1,14 +1,14 @@
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, AIMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
 import { createScopedClient } from '../config/supabase.js';
-import { createAgentTools } from './tools.js';
+import { createAgentTools, sanitizeToolArgs } from './tools.js';
 
-const bedrockMantleKey = process.env.AWS_BEDROCK_MANTLE || '';
 const baseURL = 'https://bedrock-mantle.us-east-1.api.aws/v1';
 
 export function getLLM(modelName: string = 'deepseek.v3.1', temperature: number = 0.3) {
+  const apiKey = process.env.AWS_BEDROCK_MANTLE || '';
   return new ChatOpenAI({
-    apiKey: bedrockMantleKey,
+    apiKey,
     model: modelName,
     temperature,
     maxTokens: 3072,
@@ -67,11 +67,23 @@ export function extractToolCalls(aiResponse: any): Array<{ id?: string; name: st
       let args: any = {};
       const rawArgs = raw.function?.arguments;
       if (typeof rawArgs === 'string') {
+        let cleaned = rawArgs.trim();
+        if (cleaned.startsWith('```json')) cleaned = cleaned.replace(/^```json\s*/, '');
+        if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\s*/, '');
+        if (cleaned.endsWith('```')) cleaned = cleaned.replace(/```$/, '').trim();
         try {
-          args = JSON.parse(rawArgs);
+          args = JSON.parse(cleaned);
         } catch {
+          const startIdx = cleaned.indexOf('{');
+          const endIdx = cleaned.lastIndexOf('}');
+          if (startIdx !== -1 && endIdx > startIdx) {
+            try {
+              args = JSON.parse(cleaned.substring(startIdx, endIdx + 1));
+            } catch {
+              // continue to repair
+            }
+          }
           // Attempt repair of unclosed JSON brackets from streaming/truncated outputs
-          let cleaned = rawArgs.trim();
           if (!cleaned.endsWith('}')) cleaned += '}';
           try {
             args = JSON.parse(cleaned);
@@ -83,8 +95,16 @@ export function extractToolCalls(aiResponse: any): Array<{ id?: string; name: st
         args = rawArgs;
       }
 
-      // Avoid duplicates if already populated by native LangChain tool_calls
-      if (!calls.some(c => c.name === name)) {
+      // Check if already populated by native LangChain tool_calls, backfill empty args if needed
+      const existing = calls.find(c => c.name === name);
+      if (existing) {
+        if ((!existing.args || Object.keys(existing.args).length === 0) && Object.keys(args).length > 0) {
+          existing.args = args;
+        }
+        if (!existing.id && raw.id) {
+          existing.id = raw.id;
+        }
+      } else {
         calls.push({
           id: raw.id,
           name,
@@ -111,7 +131,12 @@ export function extractToolCalls(aiResponse: any): Array<{ id?: string; name: st
         }
       }
     }
-    if (!calls.some(c => c.name === rawFuncCall.name)) {
+    const existingFunc = calls.find(c => c.name === rawFuncCall.name);
+    if (existingFunc) {
+      if ((!existingFunc.args || Object.keys(existingFunc.args).length === 0) && Object.keys(args).length > 0) {
+        existingFunc.args = args;
+      }
+    } else {
       calls.push({
         id: 'func_call',
         name: rawFuncCall.name,
@@ -158,23 +183,27 @@ export async function processAgentChat(
     // Build a sanitized assistant message with clean, valid JSON tool_calls
     const cleanAIMessage = new AIMessage({
       content: typeof aiResponse.content === 'string' ? aiResponse.content : '',
-      tool_calls: detectedToolCalls.map(tc => ({
-        id: tc.id || `call_${tc.name}`,
-        name: tc.name,
-        args: tc.args,
-      })),
+      tool_calls: detectedToolCalls.map(tc => {
+        const sanitized = sanitizeToolArgs(tc.name, tc.args, userMessage);
+        return {
+          id: tc.id || `call_${tc.name}`,
+          name: tc.name,
+          args: sanitized,
+        };
+      }),
     });
     messages.push(cleanAIMessage);
     onStep?.({ phase: 'searching', text: 'Searching academic tools...' });
     for (const toolCall of detectedToolCalls) {
+      const sanitizedArgs = sanitizeToolArgs(toolCall.name, toolCall.args, userMessage);
       const selectedTool = toolMap.get(toolCall.name);
       if (selectedTool) {
         onStep?.({ phase: 'calling_tool', tool: toolCall.name, text: `Calling tool: ${toolCall.name}...` });
         try {
-          const toolResult = await (selectedTool as any).invoke(toolCall.args);
+          const toolResult = await (selectedTool as any).invoke(sanitizedArgs);
           toolExecutions.push({
             name: toolCall.name,
-            args: toolCall.args,
+            args: sanitizedArgs,
             result: toolResult,
           });
           onStep?.({ phase: 'viewing_results', tool: toolCall.name, text: `Viewing results from ${toolCall.name}...` });
@@ -217,11 +246,25 @@ export async function processAgentChat(
       const firstGen = toolExecutions.find(t => t.name === 'generate_quiz');
       if (firstGen) {
         let topic = 'the requested topic';
+        let isSuccess = false;
+        let errorMsg = '';
         try {
           const resObj = typeof firstGen.result === 'string' ? JSON.parse(firstGen.result) : firstGen.result;
-          if (resObj.topic) topic = resObj.topic;
-        } catch {}
-        finalReply = `I have generated a practice quiz on "${topic}". You can start taking it using the card below!`;
+          if (resObj?.action === 'QUIZ_GENERATED') {
+            isSuccess = true;
+            if (resObj.topic) topic = resObj.topic;
+          } else if (resObj?.error) {
+            errorMsg = resObj.error;
+          }
+        } catch {
+          errorMsg = String(firstGen.result || firstGen.error || 'Quiz generation failed.');
+        }
+
+        if (isSuccess) {
+          finalReply = `I have generated a practice quiz on "${topic}". You can start taking it using the card below!`;
+        } else {
+          finalReply = `I encountered an issue generating the quiz on "${firstGen.args?.topic || 'the requested topic'}": ${errorMsg || 'Could not generate valid questions'}. Would you like me to try again or focus on a specific subtopic?`;
+        }
       } else {
         finalReply = `I analyzed the academic tools and data for your request. Let me know how you would like to proceed!`;
       }

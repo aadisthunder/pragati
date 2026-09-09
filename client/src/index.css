@@ -87,4 +87,32 @@
   .subtle-scroll::-webkit-scrollbar-thumb:hover {
     background: rgba(100, 116, 139, 0.6);
   }
+
+  /* No Scrollbar Utility: swipeable without visible scrollbar */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Touch & Mobile Hover Suppression: eliminate swipe jitter and sticky hover states */
+@media (hover: none), (max-width: 768px) {
+  [class*="hover:-translate"],
+  [class*="hover:translate"],
+  [class*="hover:scale"] {
+    transform: none !important;
+  }
+
+  .glass-card:hover {
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04) !important;
+    border-color: rgba(226, 232, 240, 0.9) !important;
+  }
+
+  /* Prevent browser default tap highlight gray boxes */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
 }

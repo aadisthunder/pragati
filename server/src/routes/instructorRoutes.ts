@@ -40,7 +40,7 @@ instructorRouter.post('/chat', async (req: AuthenticatedRequest, res: Response):
     const scopedClient = createScopedClient(token);
     let session: any = null;
 
-    if (sessionId) {
+    if (sessionId && sessionId !== 'new') {
       const { data: existingSession } = await scopedClient
         .from('chat_sessions')
         .select('id, title')
@@ -48,17 +48,6 @@ instructorRouter.post('/chat', async (req: AuthenticatedRequest, res: Response):
         .eq('user_id', userId)
         .maybeSingle();
       session = existingSession;
-    }
-
-    if (!session) {
-      const { data: latestSession } = await scopedClient
-        .from('chat_sessions')
-        .select('id, title')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      session = latestSession;
     }
 
     if (!session) {
