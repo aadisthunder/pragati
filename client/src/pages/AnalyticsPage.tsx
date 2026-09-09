@@ -25,7 +25,13 @@ import {
   Trash2,
 } from 'lucide-react';
 import { buildTutorMissedPrompt } from '../utils/markdownCards';
-import { getResponsivePageContainerClass, formatDeltaBadge, getPermanentCardClass } from '../utils/theme';
+import {
+  getResponsivePageContainerClass,
+  formatDeltaBadge,
+  getPermanentCardClass,
+  getMetricStatTypographyClass,
+  getMetricStatRowClass,
+} from '../utils/theme';
 
 const CHART_PALETTE = ['#0F172A', '#334155', '#475569', '#64748B', '#94A3B8'];
 
@@ -133,19 +139,19 @@ export const AnalyticsPage: React.FC = () => {
 
       {/* Metric Cards Grid with Permanent Crisp Drop Shadows & Delta Indicators */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 min-w-0">
-        <div className={`${getPermanentCardClass()} p-4 sm:p-5 min-w-0`}>
+        <div className={`${getPermanentCardClass()} p-3.5 sm:p-5 min-w-0`}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-500 font-display">Skill Rating</span>
             <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-800 flex items-center justify-center border border-slate-200 shadow-xs shrink-0">
               <Award className="w-4 h-4" />
             </div>
           </div>
-          <div className="flex items-baseline gap-2 mt-3 flex-wrap">
-            <p className="text-2xl font-extrabold text-slate-900 font-mono">
+          <div className={getMetricStatRowClass()}>
+            <p className={`text-slate-900 ${getMetricStatTypographyClass()}`}>
               {profile?.skill_rating || 1200}
             </p>
             {ratingBadge && (
-              <span className={`text-2xl font-extrabold font-mono ${ratingBadge.colorClass}`}>
+              <span className={`${getMetricStatTypographyClass()} ${ratingBadge.colorClass}`}>
                 {ratingBadge.text}
               </span>
             )}
@@ -153,19 +159,19 @@ export const AnalyticsPage: React.FC = () => {
           <span className="text-[11px] font-semibold text-slate-400 mt-1 block">Dynamic ELO score</span>
         </div>
 
-        <div className={`${getPermanentCardClass()} p-4 sm:p-5 min-w-0`}>
+        <div className={`${getPermanentCardClass()} p-3.5 sm:p-5 min-w-0`}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-500 font-display">Overall Accuracy</span>
             <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-800 flex items-center justify-center border border-slate-200 shadow-xs shrink-0">
               <Target className="w-4 h-4" />
             </div>
           </div>
-          <div className="flex items-baseline gap-2 mt-3 flex-wrap">
-            <p className="text-2xl font-extrabold text-slate-900 font-mono">
+          <div className={getMetricStatRowClass()}>
+            <p className={`text-slate-900 ${getMetricStatTypographyClass()}`}>
               {metrics?.overall_accuracy || 0}%
             </p>
             {accuracyBadge && (
-              <span className={`text-2xl font-extrabold font-mono ${accuracyBadge.colorClass}`}>
+              <span className={`${getMetricStatTypographyClass()} ${accuracyBadge.colorClass}`}>
                 {accuracyBadge.text}
               </span>
             )}
@@ -175,29 +181,33 @@ export const AnalyticsPage: React.FC = () => {
           </span>
         </div>
 
-        <div className={`${getPermanentCardClass()} p-4 sm:p-5 min-w-0`}>
+        <div className={`${getPermanentCardClass()} p-3.5 sm:p-5 min-w-0`}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-500 font-display">Avg Question Dwell</span>
             <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200/60 shadow-xs shrink-0">
               <Clock className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-extrabold text-slate-900 font-mono mt-3">
-            {metrics?.avg_dwell_time_sec || 0}s
-          </p>
+          <div className={getMetricStatRowClass()}>
+            <p className={`text-slate-900 ${getMetricStatTypographyClass()}`}>
+              {metrics?.avg_dwell_time_sec || 0}s
+            </p>
+          </div>
           <span className="text-[11px] font-semibold text-slate-400 mt-1 block">Active deliberation</span>
         </div>
 
-        <div className={`${getPermanentCardClass()} p-4 sm:p-5 min-w-0`}>
+        <div className={`${getPermanentCardClass()} p-3.5 sm:p-5 min-w-0`}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-500 font-display">Total Practice Time</span>
             <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-200/60 shadow-xs shrink-0">
               <BookOpen className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-extrabold text-slate-900 font-mono mt-3">
-            {metrics?.total_time_spent_min || 0}m
-          </p>
+          <div className={getMetricStatRowClass()}>
+            <p className={`text-slate-900 ${getMetricStatTypographyClass()}`}>
+              {metrics?.total_time_spent_min || 0}m
+            </p>
+          </div>
           <span className="text-[11px] font-semibold text-slate-400 mt-1 block">
             {metrics?.total_questions_answered || 0} questions
           </span>

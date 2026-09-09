@@ -98,6 +98,23 @@ export function formatDeltaBadge(
 }
 
 /**
+ * Metric Card Stat & Delta typography class ensuring identical font, font-weight,
+ * and responsive scaling across mobile and desktop viewports.
+ * Max values (e.g. 100.0% (+100.0%) or 3200 (+150)) fit comfortably on a single line.
+ */
+export function getMetricStatTypographyClass(): string {
+  return 'text-sm sm:text-lg lg:text-2xl font-extrabold font-mono tracking-tight shrink-0';
+}
+
+/**
+ * Metric Card Stat Row container ensuring stat and delta fit on a single line
+ * without wrapping on both mobile and web.
+ */
+export function getMetricStatRowClass(): string {
+  return 'flex items-baseline gap-1 sm:gap-2 mt-3 flex-nowrap whitespace-nowrap overflow-hidden';
+}
+
+/**
  * Permanent drop shadow styling for cards and dialog boxes with subtle micro-lift on hover
  */
 export function getPermanentCardClass(): string {
