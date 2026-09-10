@@ -138,8 +138,8 @@ export const AnalyticsPage: React.FC = () => {
         </div>
 
       {/* Metric Cards Grid with Permanent Crisp Drop Shadows & Delta Indicators */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 min-w-0">
-        <div className={`${getPermanentCardClass()} p-3.5 sm:p-5 min-w-0`}>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5 min-w-0">
+        <div className={`${getPermanentCardClass()} p-3 sm:p-4 min-w-0`}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-500 font-display">Skill Rating</span>
             <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-800 flex items-center justify-center border border-slate-200 shadow-xs shrink-0">
@@ -159,7 +159,7 @@ export const AnalyticsPage: React.FC = () => {
           <span className="text-[11px] font-semibold text-slate-400 mt-1 block">Dynamic ELO score</span>
         </div>
 
-        <div className={`${getPermanentCardClass()} p-3.5 sm:p-5 min-w-0`}>
+        <div className={`${getPermanentCardClass()} p-3 sm:p-4 min-w-0`}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-500 font-display">Overall Accuracy</span>
             <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-800 flex items-center justify-center border border-slate-200 shadow-xs shrink-0">
@@ -181,7 +181,7 @@ export const AnalyticsPage: React.FC = () => {
           </span>
         </div>
 
-        <div className={`${getPermanentCardClass()} p-3.5 sm:p-5 min-w-0`}>
+        <div className={`${getPermanentCardClass()} p-3 sm:p-4 min-w-0`}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-500 font-display">Avg Question Dwell</span>
             <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200/60 shadow-xs shrink-0">
@@ -196,7 +196,7 @@ export const AnalyticsPage: React.FC = () => {
           <span className="text-[11px] font-semibold text-slate-400 mt-1 block">Active deliberation</span>
         </div>
 
-        <div className={`${getPermanentCardClass()} p-3.5 sm:p-5 min-w-0`}>
+        <div className={`${getPermanentCardClass()} p-3 sm:p-4 min-w-0`}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-500 font-display">Total Practice Time</span>
             <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-200/60 shadow-xs shrink-0">
@@ -215,14 +215,14 @@ export const AnalyticsPage: React.FC = () => {
       </div>
 
       {/* Accuracy & Speed Performance Curve */}
-      <div className={`${getPermanentCardClass()} p-4 sm:p-6 space-y-4 min-w-0 overflow-hidden`}>
+      <div className={`${getPermanentCardClass()} p-3.5 sm:p-5 space-y-3 min-w-0 overflow-hidden`}>
         <div className="flex items-center justify-between">
-          <h3 className="text-base font-display font-bold text-slate-900">Quiz Accuracy Progression Curve</h3>
+          <h3 className="text-sm sm:text-base font-display font-bold text-slate-900">Quiz Accuracy Progression Curve</h3>
           <span className="text-xs font-mono font-semibold text-slate-400">Past Attempts</span>
         </div>
 
         {chartData.length > 0 ? (
-          <div className="h-64 w-full min-w-0 overflow-hidden">
+          <div className="h-56 sm:h-60 w-full min-w-0 overflow-hidden">
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <LineChart data={chartData} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />

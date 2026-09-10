@@ -9,6 +9,16 @@ import {
 
 export { getFromCache, isCacheFresh, setInCache, invalidateCache };
 
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+
+export function resolveApiUrl(endpoint: string): string {
+  if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {
+    return endpoint;
+  }
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  return API_BASE ? `${API_BASE}${cleanEndpoint}` : cleanEndpoint;
+}
+
 export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit = {}
@@ -35,7 +45,8 @@ export async function apiRequest<T = any>(
     headers.set('Content-Type', 'application/json');
   }
 
-  let response = await fetch(endpoint, {
+  const targetUrl = resolveApiUrl(endpoint);
+  let response = await fetch(targetUrl, {
     ...options,
     headers,
   });
@@ -45,7 +56,7 @@ export async function apiRequest<T = any>(
     const { data: refreshed } = await supabase.auth.refreshSession();
     if (refreshed.session?.access_token) {
       headers.set('Authorization', `Bearer ${refreshed.session.access_token}`);
-      response = await fetch(endpoint, {
+      response = await fetch(targetUrl, {
         ...options,
         headers,
       });
@@ -108,7 +119,8 @@ export async function apiStreamRequest(
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(endpoint, {
+  const targetUrl = resolveApiUrl(endpoint);
+  const response = await fetch(targetUrl, {
     ...options,
     headers,
   });

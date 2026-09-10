@@ -1,40 +1,68 @@
-import { Router, Response } from 'express';
+import express, { Router, Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/authMiddleware.js';
 import { processAgentChat, getLLM } from '../agent/langchainAgent.js';
 import { createScopedClient } from '../config/supabase.js';
+import { extractTextFromImage } from '../services/visionService.js';
 
 export const instructorRouter = Router();
 
-// POST /api/instructor/chat - Socratic AI Instructor with tool execution & streaming telemetry
-instructorRouter.post('/chat', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const userId = req.user!.id;
-  const token = req.token!;
-  const { message, history, sessionId } = req.body;
+// POST /api/instructor/chat - Socratic AI Instructor with image vision & tool execution
+instructorRouter.post(
+  '/chat',
+  express.json({ limit: '5mb' }),
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const userId = req.user!.id;
+    const token = req.token!;
+    const { message, history, sessionId, imageBase64 } = req.body;
 
-  if (!message || typeof message !== 'string') {
-    res.status(400).json({ error: 'Message is required' });
-    return;
-  }
-
-  const isStream = req.headers.accept?.includes('text/event-stream') || req.query.stream === 'true';
-
-  if (isStream) {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    if (typeof (res as any).flushHeaders === 'function') {
-      (res as any).flushHeaders();
+    if (!message || typeof message !== 'string') {
+      res.status(400).json({ error: 'Message is required' });
+      return;
     }
-  }
 
-  const sendStep = (step: { phase: string; text: string; tool?: string }) => {
+    if (message.length > 5000) {
+      res.status(400).json({ error: 'Message exceeds maximum allowed length (5000 characters)' });
+      return;
+    }
+
+    const isStream = req.headers.accept?.includes('text/event-stream') || req.query.stream === 'true';
+
     if (isStream) {
-      res.write(`data: ${JSON.stringify({ type: 'step', ...step })}\n\n`);
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      if (typeof (res as any).flushHeaders === 'function') {
+        (res as any).flushHeaders();
+      }
     }
-  };
 
-  try {
-    const result = await processAgentChat(userId, message, history || [], token, sendStep);
+    const sendStep = (step: { phase: string; text: string; tool?: string }) => {
+      if (isStream) {
+        res.write(`data: ${JSON.stringify({ type: 'step', ...step })}\n\n`);
+      }
+    };
+
+    try {
+      let promptForAgent = message;
+
+      // If an image was attached, extract its problem/math details via fast multimodal vision
+      if (imageBase64 && typeof imageBase64 === 'string') {
+        sendStep({
+          phase: 'status',
+          text: 'Extracting problem details from your image...',
+        });
+
+        try {
+          const extractedProblem = await extractTextFromImage(imageBase64);
+          if (extractedProblem && extractedProblem.trim()) {
+            promptForAgent = `${message}\n\n[Attached Problem Image Content]:\n${extractedProblem.trim()}`;
+          }
+        } catch (ocrErr: any) {
+          console.warn('In-chat vision extraction warning:', ocrErr.message);
+        }
+      }
+
+      const result = await processAgentChat(userId, promptForAgent, history || [], token, sendStep);
 
     // Save message pair to chat_messages if session exists
     const scopedClient = createScopedClient(token);
@@ -93,44 +121,26 @@ instructorRouter.post('/chat', async (req: AuthenticatedRequest, res: Response):
   }
 });
 
-// POST /api/instructor/ocr - Vision OCR extraction for uploaded questions
-instructorRouter.post('/ocr', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const { imageBase64 } = req.body;
+// POST /api/instructor/ocr - Vision OCR extraction with selective 5MB limit
+instructorRouter.post(
+  '/ocr',
+  express.json({ limit: '5mb' }),
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const { imageBase64 } = req.body;
 
-  if (!imageBase64) {
-    res.status(400).json({ error: 'imageBase64 is required' });
-    return;
+    if (!imageBase64 || typeof imageBase64 !== 'string') {
+      res.status(400).json({ error: 'imageBase64 string is required' });
+      return;
+    }
+
+    try {
+      const extractedText = await extractTextFromImage(imageBase64);
+      res.json({ extractedText });
+    } catch (err: any) {
+      res.status(500).json({ error: `OCR processing error: ${err.message}` });
+    }
   }
-
-  try {
-    const visionLlm = getLLM('writer.palmyra-vision-7b', 0.1);
-    const prompt = [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: 'Extract the complete text and all mathematical formulas from this question image. Convert all equations into clean LaTeX format ($...$). Return ONLY the extracted text and formulas, with no conversational filler.',
-          },
-          {
-            type: 'image_url',
-            image_url: {
-              url: imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`,
-            },
-          },
-        ],
-      },
-    ];
-
-    const response = await visionLlm.invoke(prompt as any);
-    const extractedText = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
-
-    res.json({ extractedText });
-  } catch (err: any) {
-    // Fallback message if vision model requires specific payload
-    res.status(500).json({ error: `OCR processing error: ${err.message}` });
-  }
-});
+);
 
 /**
  * Prunes chat sessions for a user so only the latest `maxSessions` (default 5) are kept.

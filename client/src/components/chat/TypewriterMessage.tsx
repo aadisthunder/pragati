@@ -72,7 +72,7 @@ export const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
   return (
     <div
       onClick={handleFastForward}
-      className={`prose prose-sm max-w-none prose-slate relative transition-opacity ${
+      className={`prose prose-sm max-w-none prose-slate prose-p:my-1 prose-headings:my-1.5 prose-ul:my-1 relative transition-opacity ${
         isTyping ? 'cursor-pointer' : ''
       }`}
       title={isTyping ? 'Click message to skip typewriter animation' : undefined}

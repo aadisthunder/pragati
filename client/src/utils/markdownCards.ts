@@ -5,14 +5,14 @@
  */
 
 export const markdownCardStyles = {
-  list: 'space-y-2.5 my-3 list-none pl-0',
+  list: 'space-y-1.5 my-1.5 pl-0 list-none',
   cardItem:
-    'rounded-xl border border-slate-200 bg-slate-50/50 p-3 my-1.5 shadow-xs text-slate-800 text-xs sm:text-sm block',
+    'rounded-lg border border-slate-200/80 bg-slate-50/50 px-2.5 py-1.5 sm:px-3 sm:py-2 my-1 shadow-2xs text-slate-800 text-xs sm:text-[13px] leading-snug sm:leading-normal block',
   heading3:
-    'font-display font-bold text-slate-900 mt-4 mb-2 pb-1 border-b border-slate-100 text-sm sm:text-base',
+    'font-display font-bold text-slate-900 mt-2.5 mb-1 text-xs sm:text-sm border-b border-slate-100 pb-0.5',
   blockquote:
-    'bg-slate-50 border-l-4 border-slate-900 rounded-r-xl p-3 my-2 text-slate-700 text-xs sm:text-sm',
-  paragraph: 'my-2 leading-relaxed text-slate-800',
+    'bg-slate-50 border-l-3 border-slate-900 rounded-r-lg px-2.5 py-1.5 my-1.5 text-slate-700 text-xs sm:text-[13px] leading-snug',
+  paragraph: 'my-1 sm:my-1.5 leading-snug sm:leading-normal text-xs sm:text-[13px] text-slate-800',
 };
 
 /**

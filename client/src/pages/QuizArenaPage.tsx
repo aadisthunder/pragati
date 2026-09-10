@@ -543,9 +543,9 @@ export const QuizArenaPage: React.FC = () => {
         <div className="flex-1 flex flex-col justify-between overflow-y-auto subtle-scroll min-w-0 pr-1">
           <div className="max-w-3xl w-full mx-auto flex-1 flex flex-col justify-between">
             {currentQuestion && (
-              <div className="bg-white border border-slate-200 p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl space-y-4 sm:space-y-6 flex-1 flex flex-col justify-between shadow-xs relative">
-                <div className="space-y-4">
-                  <div className="flex items-start justify-between gap-4">
+              <div className="bg-white border border-slate-200 p-3.5 sm:p-5 md:p-6 rounded-xl sm:rounded-2xl space-y-3 sm:space-y-4 flex-1 flex flex-col justify-between shadow-xs relative">
+                <div className="space-y-3 sm:space-y-4">
+                  <div className="flex items-start justify-between gap-3">
                     <div className="prose prose-base max-w-none text-slate-900 font-medium flex-1">
                       <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
                         {sanitizePromptText(currentQuestion.prompt)}
@@ -591,21 +591,21 @@ export const QuizArenaPage: React.FC = () => {
                   </div>
 
                   {/* Options List */}
-                  <div className="space-y-3 pt-2">
+                  <div className="space-y-2 sm:space-y-2.5 pt-1">
                     {currentQuestion.options.map((opt) => {
                       const isSelected = answers[currentQuestion.id]?.selected_answer === opt.id;
                       return (
                         <button
                           key={opt.id}
                           onClick={() => handleSelectOption(opt.id)}
-                          className={`w-full flex items-center gap-4 p-4 rounded-2xl text-left text-sm font-semibold transition-all border cursor-pointer ${
+                          className={`w-full flex items-center gap-3 p-2.5 sm:p-3 sm:px-3.5 rounded-xl text-left text-xs sm:text-sm font-semibold transition-all border cursor-pointer ${
                             isSelected
                               ? 'bg-slate-50 border-slate-900 text-slate-900 shadow-xs ring-1 ring-slate-900'
                               : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
                           }`}
                         >
                           <span
-                            className={`w-8 h-8 rounded-xl flex items-center justify-center font-mono text-xs font-bold shrink-0 transition-colors ${
+                            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center font-mono text-xs font-bold shrink-0 transition-colors ${
                               isSelected
                                 ? 'bg-slate-900 text-white shadow-xs'
                                 : 'bg-slate-100 text-slate-600'
@@ -613,7 +613,7 @@ export const QuizArenaPage: React.FC = () => {
                           >
                             {opt.id}
                           </span>
-                          <div className="flex-1 font-sans text-sm font-medium">
+                          <div className="flex-1 font-sans text-xs sm:text-sm font-medium">
                             <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
                               {formatMathForMarkdown(opt.text)}
                             </ReactMarkdown>
@@ -625,7 +625,7 @@ export const QuizArenaPage: React.FC = () => {
 
                   {/* Hint reveal drawer */}
                   {isCurrentHintVisible && currentQuestion.hint && (
-                    <div className="p-4 bg-amber-50/90 border border-amber-200/90 rounded-2xl text-xs text-amber-900 animate-in fade-in transition-all">
+                    <div className="p-3 sm:p-3.5 bg-amber-50/90 border border-amber-200/90 rounded-xl text-xs text-amber-900 animate-in fade-in transition-all">
                       <strong className="font-bold block mb-1 flex items-center gap-1.5 font-display">
                         <Lightbulb className="w-4 h-4 text-amber-600" />
                         <span>Targeted Hint:</span>
@@ -640,7 +640,7 @@ export const QuizArenaPage: React.FC = () => {
                 </div>
 
                 {/* Action Bar with Full Navigation */}
-                <div className="pt-6 border-t border-slate-200 flex items-center justify-between gap-3">
+                <div className="pt-3.5 sm:pt-4 border-t border-slate-200 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     {/* Previous Question Button */}
                     <button

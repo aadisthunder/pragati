@@ -70,7 +70,7 @@ export function getMobileHamburgerBtnClass(): string {
  * Constrained with max-w-full, min-w-0, and overflow-x-hidden to prevent mobile horizontal swiping
  */
 export function getResponsivePageContainerClass(): string {
-  return 'max-w-5xl mx-auto w-full max-w-full overflow-x-hidden min-w-0 pt-3 px-3.5 pb-6 sm:p-6 md:p-8 space-y-6 font-sans';
+  return 'max-w-5xl mx-auto w-full max-w-full overflow-x-hidden min-w-0 pt-2 px-3 pb-6 sm:px-5 sm:py-4 md:px-6 md:py-5 space-y-4 sm:space-y-5 font-sans';
 }
 
 /**
@@ -204,7 +204,15 @@ export function getUploadButtonClass(): string {
  * Suggestion chips container styling without visible scrollbar while preserving swipe
  */
 export function getSuggestionChipsContainerClass(): string {
-  return 'pointer-events-auto flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1 px-0.5';
+  return 'pointer-events-auto flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1 px-1 justify-start sm:justify-center w-full';
+}
+
+/**
+ * Suggestion chips container styling for empty / hero state
+ * Wraps responsively so chips are always centered and never clipped offscreen on mobile
+ */
+export function getHeroSuggestionChipsContainerClass(): string {
+  return 'pointer-events-auto flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 max-w-xl mx-auto px-2 w-full';
 }
 
 /**

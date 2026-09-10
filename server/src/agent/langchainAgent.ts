@@ -150,6 +150,13 @@ export function extractToolCalls(aiResponse: any): Array<{ id?: string; name: st
 
 export type AgentStepCallback = (step: { phase: string; text: string; tool?: string }) => void;
 
+const FRIENDLY_TOOL_STATUS: Record<string, string> = {
+  generate_quiz: 'Crafting your practice assessment...',
+  get_student_attempts: 'Looking up your recent quiz performance...',
+  get_attempt_telemetry: 'Reviewing the questions you found challenging...',
+  explain_missed_question: 'Preparing Socratic tutoring guidance...',
+};
+
 export async function processAgentChat(
   userId: string,
   userMessage: string,
@@ -157,7 +164,7 @@ export async function processAgentChat(
   userToken: string,
   onStep?: AgentStepCallback
 ) {
-  onStep?.({ phase: 'thinking', text: 'Thinking...' });
+  onStep?.({ phase: 'thinking', text: 'AI Instructor is thinking...' });
 
   const scopedClient = createScopedClient(userToken);
   const llm = getLLM('deepseek.v3.1', 0.2);
@@ -193,12 +200,13 @@ export async function processAgentChat(
       }),
     });
     messages.push(cleanAIMessage);
-    onStep?.({ phase: 'searching', text: 'Searching academic tools...' });
+    onStep?.({ phase: 'searching', text: 'Selecting the best learning approach...' });
     for (const toolCall of detectedToolCalls) {
       const sanitizedArgs = sanitizeToolArgs(toolCall.name, toolCall.args, userMessage);
       const selectedTool = toolMap.get(toolCall.name);
       if (selectedTool) {
-        onStep?.({ phase: 'calling_tool', tool: toolCall.name, text: `Calling tool: ${toolCall.name}...` });
+        const friendlyText = FRIENDLY_TOOL_STATUS[toolCall.name] || `Working on ${toolCall.name}...`;
+        onStep?.({ phase: 'calling_tool', tool: toolCall.name, text: friendlyText });
         try {
           const toolResult = await (selectedTool as any).invoke(sanitizedArgs);
           toolExecutions.push({
@@ -206,7 +214,7 @@ export async function processAgentChat(
             args: sanitizedArgs,
             result: toolResult,
           });
-          onStep?.({ phase: 'viewing_results', tool: toolCall.name, text: `Viewing results from ${toolCall.name}...` });
+          onStep?.({ phase: 'viewing_results', tool: toolCall.name, text: 'Finalizing concepts and questions...' });
           messages.push(
             new ToolMessage({
               tool_call_id: toolCall.id || `call_${toolCall.name}`,
@@ -232,7 +240,7 @@ export async function processAgentChat(
       }
     }
 
-    onStep?.({ phase: 'analyzing', text: 'Analyzing results & formulating guidance...' });
+    onStep?.({ phase: 'analyzing', text: 'Formulating step-by-step guidance...' });
     // Final response incorporating dynamic tool outputs
     aiResponse = await llmWithTools.invoke(messages);
   }

@@ -8,6 +8,12 @@ import path from 'path';
 dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 dotenv.config();
 
+import {
+  globalLimiter,
+  chatRateLimiter,
+  ocrRateLimiter,
+  quizRateLimiter,
+} from './middleware/rateLimiter.js';
 import { authMiddleware } from './middleware/authMiddleware.js';
 import { authRouter } from './routes/authRoutes.js';
 import { instructorRouter } from './routes/instructorRoutes.js';
@@ -17,20 +23,48 @@ import { analyticsRouter } from './routes/analyticsRoutes.js';
 const app = express();
 const port = process.env.PORT || 5000;
 
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  ...(process.env.CLIENT_URL ? process.env.CLIENT_URL.split(',').map(s => s.trim()) : []),
+  ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map(s => s.trim()) : []),
+];
+
 // Security & Parsing
 app.use(helmet());
 app.use(
   cors({
-    origin: ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173'],
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (
+        allowedOrigins.includes(origin) ||
+        /^https:\/\/.*\.vercel\.app$/.test(origin)
+      ) {
+        return callback(null, true);
+      }
+      callback(new Error(`CORS origin ${origin} not allowed`));
+    },
     credentials: true,
   })
 );
-app.use(express.json({ limit: '15mb' }));
 
-// Health Check
+// Global Small Payload Limit to prevent heap exhaustion DOS
+app.use(express.json({ limit: '100kb' }));
+
+// Apply Global Rate Limiter to all /api/* routes
+app.use('/api', globalLimiter);
+
+// Health Check (exempt from auth and heavy rate limits)
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'pragati-server', time: new Date().toISOString() });
 });
+
+// Specific Sensitive Route Limiters
+app.use('/api/instructor/chat', chatRateLimiter);
+app.use('/api/instructor/ocr', ocrRateLimiter);
+app.use('/api/quizzes', quizRateLimiter);
+app.use('/api/analytics', quizRateLimiter);
 
 // Authenticated API Routes
 app.use('/api/auth', authMiddleware as any, authRouter);
@@ -38,11 +72,14 @@ app.use('/api/instructor', authMiddleware as any, instructorRouter);
 app.use('/api/quizzes', authMiddleware as any, quizRouter);
 app.use('/api/analytics', authMiddleware as any, analyticsRouter);
 
-// Start server if not in test environment
+// Start server if not in test environment with connection timeouts
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     console.log(`Pragati Express Server running on http://localhost:${port}`);
   });
+  server.headersTimeout = 20000;
+  server.requestTimeout = 30000;
+  server.keepAliveTimeout = 5000;
 }
 
 export default app;
