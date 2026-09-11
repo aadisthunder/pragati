@@ -7,7 +7,6 @@
 ### Intelligent Socratic AI Learning Companion & Telemetry-Driven Assessment Arena
 
 [![Live Demo](https://img.shields.io/badge/Live_Demo-pragati--aadi.web.app-7C3AED?style=for-the-badge&logo=firebase&logoColor=white)](https://pragati-aadi.web.app)
-[![API Status](https://img.shields.io/badge/API_Status-Active-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://rraemkgnxfrcdjfvpiml.supabase.co/functions/v1/api/health)
 
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
@@ -30,7 +29,7 @@
 ## Table of Contents
 
 - [Overview](#overview)
-- [Live Deployment](#live-deployment)
+- [Live Demo](#live-demo)
 - [Core Features](#core-features)
 - [System Architecture (BFF Pattern)](#system-architecture-bff-pattern)
 - [AI Engine & Capabilities](#ai-engine--capabilities)
@@ -58,16 +57,12 @@ Pragati combines:
 
 ---
 
-## Live Deployment
+## Live Demo
 
-Pragati is deployed and live in production:
+The production application is live and accessible:
 
-| Service | Infrastructure | Project ID | Live Link |
-| :--- | :--- | :--- | :--- |
-| **Frontend Application** | Firebase Hosting | `pragati-aadi` | [https://pragati-aadi.web.app](https://pragati-aadi.web.app) |
-| **Backend API Engine** | Supabase Edge Runtime | `pragati` (`rraemkgnxfrcdjfvpiml`) | [https://rraemkgnxfrcdjfvpiml.supabase.co/functions/v1/api](https://rraemkgnxfrcdjfvpiml.supabase.co/functions/v1/api) |
-| **Database & Auth** | Supabase PostgreSQL | `pragati` (`rraemkgnxfrcdjfvpiml`) | Host: `db.rraemkgnxfrcdjfvpiml.supabase.co` |
-| **API Health Probe** | Edge Runtime Health | `api/health` | [https://rraemkgnxfrcdjfvpiml.supabase.co/functions/v1/api/health](https://rraemkgnxfrcdjfvpiml.supabase.co/functions/v1/api/health) |
+- **Web Application**: [https://pragati-aadi.web.app](https://pragati-aadi.web.app)
+- **Recruiter / Evaluator Quick Access**: On the login screen, click **"Instant Judge Login"** to evaluate the platform immediately with pre-loaded telemetry data, quiz attempts, and analytics without needing an OTP or Google account.
 
 ---
 
@@ -271,11 +266,9 @@ cd client && npm run build
    ```
    Live at: `https://pragati-aadi.web.app`
 
-#### 2. Backend on Supabase (`pragati`)
-- The backend API is deployed as a Supabase Edge Function:
-  - Entrypoint: `supabase/functions/api/index.ts`
-  - Function URL: `https://rraemkgnxfrcdjfvpiml.supabase.co/functions/v1/api`
-- All database tables, RLS policies, and migrations are applied on Supabase project `pragati` (`rraemkgnxfrcdjfvpiml`).
+#### 2. Backend on Supabase Edge Runtime
+- The backend API is deployed as a secure Supabase Edge Function (`supabase/functions/api/index.ts`).
+- All database queries, telemetry tracking, and AI tutoring requests are routed through the backend proxy with Supabase JWT authentication and Row Level Security (RLS).
 
 ### Alternative Deployment Options
 
@@ -286,7 +279,7 @@ cd client && npm run build
 4. Configure Environment Variables:
    - `VITE_SUPABASE_URL`: `https://<your-project>.supabase.co`
    - `VITE_SUPABASE_ANON_KEY`: `<your-supabase-anon-key>`
-   - `VITE_API_URL`: `https://rraemkgnxfrcdjfvpiml.supabase.co/functions/v1/api`
+   - `VITE_API_URL`: `https://<your-project>.supabase.co/functions/v1/api`
 5. Deploy.
 
 #### Backend (Render or Railway)
