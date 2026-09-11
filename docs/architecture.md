@@ -1,5 +1,5 @@
 # Pragati - System Architecture & Technical Specifications
-*Client-Server Architecture • Backend LangChain Agent • Supabase Infrastructure • Bedrock Mantle LLM*
+*Client-Server Architecture • Backend LangChain Agent • Supabase Infrastructure & Edge Runtime • Groq LPU Inference*
 
 ---
 
@@ -10,10 +10,10 @@ Pragati is architected with a strict **Backend-for-Frontend (BFF)** pattern.
 
 ```mermaid
 graph TD
-    subgraph Client ["Client Application (React + Vite + TS + Tailwind)"]
+    subgraph Client ["Client Application (React 18 + Vite + TS + Tailwind) [Firebase Hosting]"]
         AuthView["Auth (Google OAuth & Email Magic Link)"]
         Sidebar["Consistent Sidebar (Instructor, Quizzes, Analytics)"]
-        InstructorUI["AI Instructor Chat Interface"]
+        InstructorUI["AI Instructor Chat & Snapshot OCR Dock"]
         QuizUI["Interactive Quiz Arena & Telemetry Tracker"]
         AnalyticsUI["Student Analytics & Telemetry Dashboard"]
         APIClient["BFF API Client (/api/* with Bearer JWT)"]
@@ -23,9 +23,9 @@ graph TD
         InstructorUI & QuizUI & AnalyticsUI --> APIClient
     end
 
-    subgraph Server ["Backend API & Agent Gateway (Node.js + Express + TS)"]
+    subgraph Backend ["Backend API & Agent Gateway (Node.js Express / Supabase Edge)"]
         AuthMW["Supabase JWT Verification Middleware"]
-        Router["Express API Router"]
+        Router["API Router (/api/*)"]
         
         subgraph AgentEngine ["Backend AI Agent Engine (LangChain)"]
             LCAgent["LangChain Tool-Calling Agent"]
@@ -38,15 +38,16 @@ graph TD
         end
 
         subgraph CoreServices ["Core Backend Services"]
+            VisionService["Multimodal Vision OCR Service"]
             QuizService["Quiz & Telemetry Service"]
             AnalyticsService["Analytics Aggregator & Telemetry Calculator"]
         end
 
-        DBAdapter["Supabase Admin SDK Client (Service Role)"]
+        DBAdapter["Supabase Client (RLS Enforced)"]
     end
 
     subgraph CloudInfra ["Cloud Infrastructure & Persistence"]
-        BedrockMantle["AWS Bedrock Mantle Endpoint (deepseek.v3.1)"]
+        GroqLPU["Groq LPU Endpoint (openai/gpt-oss-120b & qwen/qwen3.6-27b)"]
         SupabaseAuth["Supabase Auth (Google OAuth + Magic Link OTP)"]
         SupabaseDB[("Supabase PostgreSQL (pragati)")]
     end
@@ -54,7 +55,8 @@ graph TD
     APIClient -->|All Requests with Bearer JWT| AuthMW
     AuthMW --> Router
     Router --> AgentEngine & CoreServices
-    AgentEngine --> BedrockMantle
+    AgentEngine --> GroqLPU
+    CoreServices --> GroqLPU
     AgentEngine --> DBAdapter
     CoreServices --> DBAdapter
     DBAdapter --> SupabaseDB
@@ -72,20 +74,21 @@ graph TD
    - Every application route (`/instructor`, `/quizzes`, `/analytics`) is wrapped with `ProtectedRoute`.
    - Unauthenticated visitors are redirected to `/login`.
 3. **Strict User Data Isolation**:
-   - The backend `authMiddleware` verifies the Supabase access token on every request.
+   - The backend `authMiddleware` verifies the Supabase access token on every request via `supabase.auth.getUser(token)`.
    - The decoded `user.id` is injected into `req.user`.
-   - All database queries filter strictly by `user_id = req.user.id`.
+   - All database queries filter strictly by `user_id = req.user.id`, backed by database-level Row Level Security (RLS).
 
 ---
 
-## 3. Backend AI Agent (LangChain + Bedrock Mantle)
+## 3. Backend AI Agent & Multimodal Vision (LangChain + Groq LPU)
 
-The AI Instructor is an autonomous **LangChain Tool-Calling Agent** running inside the Node.js backend.
+The AI Instructor is an autonomous **LangChain Tool-Calling Agent** running inside the backend.
 
 ### Model Configuration
-- **Endpoint**: `https://bedrock-mantle.us-east-1.api.aws/v1`
-- **Authentication**: `process.env.AWS_BEDROCK_MANTLE`
-- **Default Model**: `deepseek.v3.1` (sub-400ms ultra-fast inference and strong reasoning) with fallback to `zai.glm-4.7` or `mistral.mistral-large-3-675b-instruct`.
+- **Endpoint**: `https://api.groq.com/openai/v1`
+- **Authentication**: `process.env.GROQ_API_KEY`
+- **Default Reasoning Model**: `openai/gpt-oss-120b` (sub-300ms ultra-fast inference and strong Socratic reasoning on Groq LPU hardware) with fallback to `llama-3.3-70b-versatile`.
+- **Multimodal Vision Model**: `qwen/qwen3.6-27b` for textbook problem OCR and diagram mathematical reasoning.
 
 ### Dedicated Agent Tools
 1. **`generate_quiz(topic, difficulty, num_questions)`**:
@@ -98,6 +101,12 @@ The AI Instructor is an autonomous **LangChain Tool-Calling Agent** running insi
    - Retrieves granular performance metrics: dwell time per question, hints requested, and identifies questions the student missed or skipped.
 4. **`explain_missed_question(question_id)`**:
    - Fetches the missed question prompt, the student's incorrect selection, and the correct rationale to deliver targeted Socratic remediation.
+
+### Multimodal Vision Pipeline
+1. Student captures physical textbook problem or uploads diagram via the snapshot camera dock.
+2. Client compresses image below 1MB to prevent bandwidth exhaustion.
+3. Backend passes base64 payload to Groq's high-speed multimodal vision model (`qwen/qwen3.6-27b`).
+4. Extracted mathematical expressions and LaTeX are fed into the Socratic AI Instructor prompt for step-by-step guidance.
 
 ---
 
@@ -180,9 +189,10 @@ erDiagram
 
 ---
 
-## 5. Technology Stack & Project Structure
+## 5. Technology Stack & Production Architecture
 
 ### Frontend (`client/`)
+- **Hosting**: Firebase Hosting (`pragati-aadi.web.app`)
 - **Framework**: React 18+ (Vite)
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS with Glassmorphism tokens (`bg-white/80 backdrop-blur-md border border-slate-200/80 shadow-sm`)
@@ -190,38 +200,43 @@ erDiagram
 - **Math & Markdown**: `react-markdown`, `remark-math`, `rehype-katex`
 - **Charts**: Recharts (clean 2D lines & bar graphs)
 
-### Backend (`server/`)
-- **Runtime**: Node.js
-- **Framework**: Express.js with TypeScript
-- **AI Agent**: LangChain (`@langchain/core`, `@langchain/openai`)
-- **Database Client**: `@supabase/supabase-js` (Service Role for admin queries)
-- **Validation**: Zod schema parsing
+### Backend API & Runtimes
+- **Production Serverless**: Supabase Edge Functions (`supabase/functions/api/index.ts`) on Deno runtime with CORS whitelist locking.
+- **Dedicated Container Runtime**: Node.js Express server (`server/src/server.ts`) for local development and containerized deployments.
+- **AI Agent Engine**: LangChain (`@langchain/core`, `@langchain/openai`) powered by Groq LPU hardware.
+- **Database & Auth**: `@supabase/supabase-js` with Row Level Security (RLS) on PostgreSQL 17.
+- **Validation**: Zod schema parsing.
 
-### Root Layout
+### Repository Layout
 ```text
 pragati/
 ├── client/                     # Vite + React 18 + TS Frontend
 │   ├── src/
-│   │   ├── api/                # API client with Supabase JWT
+│   │   ├── api/                # API client with Supabase JWT & SWR cache
 │   │   ├── components/
 │   │   │   ├── layout/         # Glassmorphism AppShell & Fixed Sidebar
 │   │   │   ├── auth/           # Google OAuth & Email Magic Link forms
-│   │   │   ├── instructor/     # LangChain Agent Chat UI & Tool visualizers
-│   │   │   ├── quiz/           # Quiz Arena, dual timers, hint reveal
-│   │   │   └── analytics/      # Telemetry scorecards, dwell time breakdown
-│   │   ├── context/            # AuthContext, AppContext
+│   │   │   ├── chat/           # TypewriterMessage & Chat Bubble components
+│   │   │   └── ...
+│   │   ├── pages/              # InstructorPage, QuizzesPage, AnalyticsPage, LoginPage
+│   │   ├── context/            # AuthContext
 │   │   ├── App.tsx
 │   │   └── main.tsx
 ├── server/                     # Express + TypeScript Backend
 │   ├── src/
 │   │   ├── agent/              # LangChain Agent & Tools (quiz gen, telemetry)
-│   │   ├── middleware/         # authMiddleware (Supabase JWT verification)
-│   │   ├── routes/             # /api/instructor, /api/quizzes, /api/analytics
-│   │   ├── db/                 # Supabase client & migration scripts
+│   │   ├── middleware/         # authMiddleware & rateLimiter
+│   │   ├── routes/             # /api/instructor, /api/quizzes, /api/analytics, /api/auth
+│   │   ├── services/           # visionService & analyticsService
+│   │   ├── config/             # Supabase client initialization
 │   │   └── server.ts
-├── rules.md                    # Project Engineering Rules
-├── GEMINI.md                   # Antigravity Workspace Directives
-├── architecture.md             # System Architecture & Contracts
-├── design.md                   # Minimalist Glassmorphism UI Guidelines
-└── .env                        # Bedrock Mantle & Supabase Credentials
+├── supabase/
+│   └── functions/
+│       └── api/                # Deployed Supabase Edge Function
+├── firebase.json               # Firebase Hosting configuration
+├── .firebaserc                 # Firebase default project alias
+├── docs/
+│   ├── architecture.md         # System Architecture & Technical Specifications
+│   └── design.md               # Minimalist Glassmorphism UI Guidelines
+└── README.md                   # Project Overview & Live Access Showcase
 ```
