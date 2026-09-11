@@ -423,7 +423,7 @@ export const InstructorPage: React.FC = () => {
                     adjustTextareaHeight();
                   }, 20);
                 }}
-                className="text-xs font-medium px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-xs whitespace-nowrap active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                className="text-xs font-medium px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-xs whitespace-nowrap active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex-shrink-0"
               >
                 {chip.label}
               </button>

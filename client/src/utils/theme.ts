@@ -204,15 +204,15 @@ export function getUploadButtonClass(): string {
  * Suggestion chips container styling without visible scrollbar while preserving swipe
  */
 export function getSuggestionChipsContainerClass(): string {
-  return 'pointer-events-auto flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1 px-1 justify-start sm:justify-center w-full';
+  return 'pointer-events-auto flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1 px-1 justify-start sm:justify-center w-full max-w-3xl mx-auto flex-nowrap';
 }
 
 /**
  * Suggestion chips container styling for empty / hero state
- * Wraps responsively so chips are always centered and never clipped offscreen on mobile
+ * Enforces a single centered line on desktop, while smoothly scrolling without visible scrollbar on mobile
  */
 export function getHeroSuggestionChipsContainerClass(): string {
-  return 'pointer-events-auto flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 max-w-xl mx-auto px-2 w-full';
+  return 'pointer-events-auto flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1 px-2 w-full max-w-3xl mx-auto justify-start sm:justify-center flex-nowrap';
 }
 
 /**

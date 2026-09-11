@@ -72,6 +72,20 @@ app.use('/api/instructor', authMiddleware as any, instructorRouter);
 app.use('/api/quizzes', authMiddleware as any, quizRouter);
 app.use('/api/analytics', authMiddleware as any, analyticsRouter);
 
+// 404 Handler for undefined API routes
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
+});
+
+// Global Centralized JSON Error Handler
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('Unhandled Server Error:', err.message);
+  const statusCode = err.status || err.statusCode || 500;
+  res.status(statusCode).json({
+    error: err.message || 'Internal Server Error',
+  });
+});
+
 // Start server if not in test environment with connection timeouts
 if (process.env.NODE_ENV !== 'test') {
   const server = app.listen(port, () => {

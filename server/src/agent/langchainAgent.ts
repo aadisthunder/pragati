@@ -3,17 +3,26 @@ import { HumanMessage, AIMessage, SystemMessage, ToolMessage } from '@langchain/
 import { createScopedClient } from '../config/supabase.js';
 import { createAgentTools, sanitizeToolArgs } from './tools.js';
 
-const baseURL = 'https://bedrock-mantle.us-east-1.api.aws/v1';
+const baseURL = process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
 
-export function getLLM(modelName: string = 'deepseek.v3.1', temperature: number = 0.3) {
-  const apiKey = process.env.AWS_BEDROCK_MANTLE || '';
+export function getLLM(
+  modelName: string = process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
+  temperature: number = 0.3,
+  maxTokens: number = 3072,
+  maxRetries: number = 2,
+  timeoutMs: number = 20000
+) {
+  const apiKey = process.env.GROQ_API_KEY || '';
   return new ChatOpenAI({
     apiKey,
     model: modelName,
     temperature,
-    maxTokens: 3072,
+    maxTokens,
+    maxRetries,
+    timeout: timeoutMs,
     configuration: {
       baseURL,
+      timeout: timeoutMs,
     },
   });
 }
@@ -167,7 +176,7 @@ export async function processAgentChat(
   onStep?.({ phase: 'thinking', text: 'AI Instructor is thinking...' });
 
   const scopedClient = createScopedClient(userToken);
-  const llm = getLLM('deepseek.v3.1', 0.2);
+  const llm = getLLM(process.env.GROQ_MODEL || 'openai/gpt-oss-120b', 0.2);
   const tools = createAgentTools(scopedClient, userId, llm);
   const toolMap = new Map(tools.map(t => [t.name, t]));
   const llmWithTools = llm.bindTools(tools);
@@ -245,9 +254,11 @@ export async function processAgentChat(
     aiResponse = await llmWithTools.invoke(messages);
   }
 
-  let finalReply = typeof aiResponse.content === 'string' 
+  let rawContent = typeof aiResponse.content === 'string' 
     ? aiResponse.content.trim()
     : JSON.stringify(aiResponse.content);
+
+  let finalReply = rawContent.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
   if (!finalReply) {
     if (toolExecutions.length > 0) {

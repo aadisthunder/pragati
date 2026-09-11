@@ -57,6 +57,10 @@ export const CHIP_SUGGESTIONS: ChipSuggestion[] = [
     prompt: 'Generate a quiz to test my understanding on topic : ',
   },
   {
+    label: 'Review performance',
+    prompt: 'Can you review my recent quiz attempts and performance?',
+  },
+  {
     label: 'Review missed questions',
     prompt:
       'Review the questions I missed or skipped in my recent quiz attempts and explain how to solve them step-by-step',

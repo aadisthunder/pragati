@@ -1,3 +1,4 @@
+import { HumanMessage } from '@langchain/core/messages';
 import { getLLM } from '../agent/langchainAgent.js';
 
 /**
@@ -8,7 +9,10 @@ import { getLLM } from '../agent/langchainAgent.js';
 export function cleanExtractedVisionText(rawText: string): string {
   if (!rawText || typeof rawText !== 'string') return '';
 
-  const lines = rawText.split('\n');
+  // Strip internal chain-of-thought <think>...</think> blocks from models
+  const withoutThinking = rawText.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+  const lines = withoutThinking.split('\n');
   const cleanedLines: string[] = [];
   let prevLine = '';
   let repeatCount = 0;
@@ -84,43 +88,42 @@ export async function extractTextFromImage(imageBase64: string): Promise<string>
     ? imageBase64
     : `data:image/jpeg;base64,${imageBase64}`;
 
-  const prompt = [
-    {
-      role: 'user',
-      content: [
-        {
-          type: 'text',
-          text: 'Extract all problem text, math equations, and diagrams from this image. Format all mathematical equations into clean LaTeX ($...$ for inline, $$...$$ for block). Return ONLY the extracted problem content without preamble, document tags, or conversational filler. If the image is blank or has no text, reply with NONE.',
+  const message = new HumanMessage({
+    content: [
+      {
+        type: 'text',
+        text: 'Extract all problem text, math equations, and diagrams from this image. Format all mathematical equations into clean LaTeX ($...$ for inline, $$...$$ for block). Return ONLY the extracted problem content without preamble, document tags, or conversational filler. If the image is blank or has no text, reply with NONE.',
+      },
+      {
+        type: 'image_url',
+        image_url: {
+          url: formattedUrl,
         },
-        {
-          type: 'image_url',
-          image_url: {
-            url: formattedUrl,
-          },
-        },
-      ],
-    },
-  ];
+      },
+    ],
+  });
 
   let rawExtracted = '';
 
-  // 1. Primary: Fast Qwen-VL (~1.2s latency, high LaTeX accuracy, no token loops)
+  const visionModel = process.env.GROQ_VISION_MODEL || 'qwen/qwen3.6-27b';
+
+  // 1. Primary: Groq Multimodal Vision (fast LPU latency, clean LaTeX extraction)
   try {
-    const primaryVisionLlm = getLLM('qwen.qwen3-vl-235b-a22b-instruct', 0.1);
-    const response = await primaryVisionLlm.invoke(prompt as any);
+    const primaryVisionLlm = getLLM(visionModel, 0.1, 300, 0, 8000);
+    const response = await primaryVisionLlm.invoke([message]);
     rawExtracted = typeof response.content === 'string' ? response.content.trim() : JSON.stringify(response.content);
   } catch (err: any) {
-    console.warn('Qwen-VL primary vision call failed, falling back to Palmyra:', err.message);
+    console.warn('Groq primary vision call failed, trying fallback:', err.message);
   }
 
-  // 2. Fallback to Palmyra 7B if Qwen failed or returned empty
+  // 2. Fallback to secondary vision model if primary failed or returned empty
   if (!rawExtracted || rawExtracted === 'NONE') {
     try {
-      const fallbackVisionLlm = getLLM('writer.palmyra-vision-7b', 0.1);
-      const fbResponse = await fallbackVisionLlm.invoke(prompt as any);
+      const fallbackVisionLlm = getLLM('qwen/qwen3.8-27b', 0.1, 300, 0, 8000);
+      const fbResponse = await fallbackVisionLlm.invoke([message]);
       rawExtracted = typeof fbResponse.content === 'string' ? fbResponse.content.trim() : JSON.stringify(fbResponse.content);
     } catch (fbErr: any) {
-      console.warn('Palmyra fallback vision call failed:', fbErr.message);
+      console.warn('Groq fallback vision call failed:', fbErr.message);
     }
   }
 
