@@ -76,3 +76,10 @@ tmp/
 temp/
 scratch/
 .firebase/
+
+# Internal Development & Scratch Files
+docs/superpowers/
+quality-assurance/
+server/scripts/
+rules.md
+GEMINI.md
