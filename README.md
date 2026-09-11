@@ -6,16 +6,22 @@
 
 ### Intelligent Socratic AI Learning Companion & Telemetry-Driven Assessment Arena
 
+[![Live Demo](https://img.shields.io/badge/Live_Demo-pragati--aadi.web.app-7C3AED?style=for-the-badge&logo=firebase&logoColor=white)](https://pragati-aadi.web.app)
+[![API Status](https://img.shields.io/badge/API_Status-Active-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://rraemkgnxfrcdjfvpiml.supabase.co/functions/v1/api/health)
+
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-6.0-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vitejs.dev/)
 [![Groq](https://img.shields.io/badge/Groq-LPU_Inference-F55036?style=flat-square&logo=groq&logoColor=white)](https://groq.com/)
 [![Supabase](https://img.shields.io/badge/Supabase-Auth_&_Postgres-3ECF8E?style=flat-square&logo=supabase&logoColor=white)](https://supabase.com/)
+[![Firebase](https://img.shields.io/badge/Firebase-Hosting-FFA611?style=flat-square&logo=firebase&logoColor=black)](https://firebase.google.com/)
 [![TailwindCSS](https://img.shields.io/badge/Tailwind-CSS_3.4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
 *Built for STEM students, competitive exam aspirants, and curious minds who want to master concepts through first principles instead of memorizing flat answers.*
+
+**Live Application**: [https://pragati-aadi.web.app](https://pragati-aadi.web.app)
 
 </div>
 
@@ -24,6 +30,7 @@
 ## Table of Contents
 
 - [Overview](#overview)
+- [Live Deployment](#live-deployment)
 - [Core Features](#core-features)
 - [System Architecture (BFF Pattern)](#system-architecture-bff-pattern)
 - [AI Engine & Capabilities](#ai-engine--capabilities)
@@ -48,6 +55,19 @@ Pragati combines:
 1. **Socratic AI Tutoring**: Step-by-step guidance through first principles using Groq's high-speed LPU inference.
 2. **Cognitive Telemetry**: Granular tracking of question dwell time, hint usage, and mistake patterns.
 3. **Dynamic Assessment Arena**: Automatic generation of multiple-choice tests tailored to the student's mastery level and performance telemetry.
+
+---
+
+## Live Deployment
+
+Pragati is deployed and live in production:
+
+| Service | Infrastructure | Project ID | Live Link |
+| :--- | :--- | :--- | :--- |
+| **Frontend Application** | Firebase Hosting | `pragati-aadi` | [https://pragati-aadi.web.app](https://pragati-aadi.web.app) |
+| **Backend API Engine** | Supabase Edge Runtime | `pragati` (`rraemkgnxfrcdjfvpiml`) | [https://rraemkgnxfrcdjfvpiml.supabase.co/functions/v1/api](https://rraemkgnxfrcdjfvpiml.supabase.co/functions/v1/api) |
+| **Database & Auth** | Supabase PostgreSQL | `pragati` (`rraemkgnxfrcdjfvpiml`) | Host: `db.rraemkgnxfrcdjfvpiml.supabase.co` |
+| **API Health Probe** | Edge Runtime Health | `api/health` | [https://rraemkgnxfrcdjfvpiml.supabase.co/functions/v1/api/health](https://rraemkgnxfrcdjfvpiml.supabase.co/functions/v1/api/health) |
 
 ---
 
@@ -238,17 +258,38 @@ cd client && npm run build
 
 ## Deployment Guide
 
-### Frontend (Vercel)
+### Production Setup (Firebase + Supabase)
+
+#### 1. Frontend on Firebase Hosting (`pragati-aadi`)
+1. Build the production bundle:
+   ```bash
+   cd client && npm run build
+   ```
+2. Deploy to Firebase:
+   ```bash
+   npx firebase-tools deploy --only hosting --project pragati-aadi
+   ```
+   Live at: `https://pragati-aadi.web.app`
+
+#### 2. Backend on Supabase (`pragati`)
+- The backend API is deployed as a Supabase Edge Function:
+  - Entrypoint: `supabase/functions/api/index.ts`
+  - Function URL: `https://rraemkgnxfrcdjfvpiml.supabase.co/functions/v1/api`
+- All database tables, RLS policies, and migrations are applied on Supabase project `pragati` (`rraemkgnxfrcdjfvpiml`).
+
+### Alternative Deployment Options
+
+#### Frontend (Vercel)
 1. Import the repository in [Vercel](https://vercel.com).
 2. Set **Root Directory** to `client`.
 3. Framework Preset: **Vite**.
 4. Configure Environment Variables:
    - `VITE_SUPABASE_URL`: `https://<your-project>.supabase.co`
    - `VITE_SUPABASE_ANON_KEY`: `<your-supabase-anon-key>`
-   - `VITE_API_URL`: `https://<your-backend-service>.onrender.com`
+   - `VITE_API_URL`: `https://rraemkgnxfrcdjfvpiml.supabase.co/functions/v1/api`
 5. Deploy.
 
-### Backend (Render or Railway)
+#### Backend (Render or Railway)
 1. Create a new **Web Service** on [Render](https://render.com) or [Railway](https://railway.app).
 2. Set **Root Directory** to `server`.
 3. Build Command: `npm run build`
@@ -259,12 +300,12 @@ cd client && npm run build
    - `SUPABASE_URL`: `https://<your-project>.supabase.co`
    - `SUPABASE_ANON_KEY`: `<your-supabase-anon-key>`
    - `GROQ_API_KEY`: `<your-groq-api-key>`
-   - `CLIENT_URL`: `https://<your-vercel-app>.vercel.app`
+   - `CLIENT_URL`: `https://pragati-aadi.web.app`
 
-### Supabase Configuration
+### Supabase URL Configuration
 In your Supabase project dashboard under **Authentication -> URL Configuration**:
-- **Site URL**: `https://<your-vercel-app>.vercel.app`
-- **Redirect URLs**: Add `https://<your-vercel-app>.vercel.app/**`
+- **Site URL**: `https://pragati-aadi.web.app`
+- **Redirect URLs**: Add `https://pragati-aadi.web.app/**`
 
 ---
 
