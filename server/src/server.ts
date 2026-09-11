@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import dotenv from 'dotenv';
 import path from 'path';
 
@@ -31,8 +32,18 @@ const allowedOrigins = [
   ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map(s => s.trim()) : []),
 ];
 
-// Security & Parsing
+// Security & Compression
 app.use(helmet());
+app.use(
+  compression({
+    filter: (req, res) => {
+      if (req.headers.accept?.includes('text/event-stream')) {
+        return false;
+      }
+      return compression.filter(req, res);
+    },
+  })
+);
 app.use(
   cors({
     origin: (origin, callback) => {
