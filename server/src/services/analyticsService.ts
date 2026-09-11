@@ -40,8 +40,10 @@ export function calculateAttemptSummary(answers: QuestionTelemetryInput[]): Atte
   for (const a of answers) {
     if (a.is_correct) score++;
     if (a.is_skipped) skipped_count++;
-    total_time_sec += a.dwell_time_sec || 0;
-    hints_count += a.hints_used || 0;
+    const clampedDwell = Math.max(0, Math.min(7200, a.dwell_time_sec || 0));
+    const clampedHints = Math.max(0, Math.min(10, a.hints_used || 0));
+    total_time_sec += clampedDwell;
+    hints_count += clampedHints;
   }
 
   const accuracy_pct = Number(((score / total_questions) * 100).toFixed(2));

@@ -7,6 +7,9 @@ const allowedOrigins = [
   'http://127.0.0.1:5173',
 ];
 
+const SYSTEM_PROMPT =
+  'You are Pragati AI Instructor, a warm, encouraging, and rigorous Socratic learning mentor. Never give direct answers right away. Guide students with probing questions, analogies, and conceptual hints. Format equations in LaTeX ($...$ for inline, $$...$$ for block). NEVER use emojis.';
+
 Deno.serve(async (req: Request) => {
   const origin = req.headers.get('Origin') || '';
   const isAllowed = allowedOrigins.includes(origin);
@@ -39,9 +42,12 @@ Deno.serve(async (req: Request) => {
   }
 
   const url = new URL(req.url);
-  // Normalize path across /functions/v1/api and /api
-  let path = url.pathname.replace(/^\/functions\/v1\/api/, '').replace(/^\/api/, '');
-  if (!path || path === '') path = '/';
+  // Normalize path across /functions/v1/api and /api (including nested /api prefixes)
+  let path = url.pathname.replace(/^\/functions\/v1\/api/, '');
+  while (path.startsWith('/api/')) {
+    path = path.slice(4);
+  }
+  if (path === '/api' || !path) path = '/';
 
   // Environment variables (automatically injected by Supabase Edge Runtime)
   const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
@@ -64,6 +70,10 @@ Deno.serve(async (req: Request) => {
 
   if (!token) {
     return errorResponse('Not authenticated: Missing Bearer token in Authorization header', 401);
+  }
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return errorResponse('Server configuration error: SUPABASE_URL or SUPABASE_ANON_KEY is missing in environment', 500);
   }
 
   // Scoped Supabase Client
@@ -173,8 +183,8 @@ Deno.serve(async (req: Request) => {
       const body = await req.json().catch(() => ({}));
       const answers = body.answers;
 
-      if (!Array.isArray(answers)) {
-        return errorResponse('answers must be an array', 400);
+      if (!Array.isArray(answers) || answers.length === 0) {
+        return errorResponse('answers must be a non-empty array', 400);
       }
 
       const { data: questions, error: qError } = await supabase
@@ -182,7 +192,7 @@ Deno.serve(async (req: Request) => {
         .select('id, correct_answer, explanation, prompt')
         .eq('quiz_id', quizId);
 
-      if (qError || !questions) {
+      if (qError || !questions || questions.length === 0) {
         return errorResponse('Failed to retrieve quiz questions', 500);
       }
 
@@ -198,7 +208,11 @@ Deno.serve(async (req: Request) => {
         const is_skipped = !ans.selected_answer;
         const is_correct = !is_skipped && ans.selected_answer === q.correct_answer;
         if (is_correct) correctCount++;
-        totalDwell += (ans.dwell_time_sec || 0);
+
+        // Clamp dwell time [0, 7200] and hints [0, 10]
+        const dwell = Math.max(0, Math.min(7200, Number(ans.dwell_time_sec) || 0));
+        const hints = Math.max(0, Math.min(10, Number(ans.hints_used) || 0));
+        totalDwell += dwell;
 
         evaluatedTelemetry.push({
           question_id: ans.question_id,
@@ -206,8 +220,8 @@ Deno.serve(async (req: Request) => {
           selected_answer: ans.selected_answer || null,
           is_correct,
           is_skipped,
-          dwell_time_sec: ans.dwell_time_sec || 0,
-          hints_used: ans.hints_used || 0,
+          dwell_time_sec: dwell,
+          hints_used: hints,
           correct_answer: q.correct_answer,
           explanation: q.explanation,
           prompt: q.prompt,
@@ -258,7 +272,7 @@ Deno.serve(async (req: Request) => {
 
       const currentRating = profile?.skill_rating || 1200;
       const ratingChange = accuracyPct >= 80 ? 25 : accuracyPct >= 50 ? 10 : -15;
-      const newRating = Math.max(100, currentRating + ratingChange);
+      const newRating = Math.max(800, currentRating + ratingChange);
 
       await supabase
         .from('user_profiles')
@@ -281,7 +295,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // -----------------------------------------------------------------
-    // Analytics Dashboard
+    // Analytics Dashboard & Missed Questions Cleanup
     // -----------------------------------------------------------------
     if (path === '/analytics/dashboard' && req.method === 'GET') {
       const { data: profile } = await supabase
@@ -355,6 +369,7 @@ Deno.serve(async (req: Request) => {
           full_name: profile?.full_name || user.email?.split('@')[0],
           skill_rating: profile?.skill_rating || 1200,
           streak_days: profile?.streak_days || 0,
+          avatar_url: profile?.avatar_url,
         },
         metrics: {
           total_attempts: attemptsList.length,
@@ -369,16 +384,252 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // Delete single missed question item
+    const singleMissedMatch = path.match(/^\/analytics\/missed-questions\/([a-zA-Z0-9_-]+)$/);
+    if (singleMissedMatch && req.method === 'DELETE') {
+      const id = singleMissedMatch[1];
+      const { error } = await supabase
+        .from('question_telemetry')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
+
+      if (error) return errorResponse(error.message, 500);
+      return jsonResponse({ success: true, id });
+    }
+
+    // Clear all missed questions
+    if (path === '/analytics/missed-questions' && req.method === 'DELETE') {
+      const { error } = await supabase
+        .from('question_telemetry')
+        .delete()
+        .eq('user_id', userId)
+        .or('is_correct.eq.false,is_skipped.eq.true');
+
+      if (error) return errorResponse(error.message, 500);
+      return jsonResponse({ success: true, message: 'All missed questions cleared' });
+    }
+
+    // -----------------------------------------------------------------
+    // Instructor Sessions Endpoints
+    // -----------------------------------------------------------------
+    if (path === '/instructor/sessions' && req.method === 'GET') {
+      const { data: sessions, error } = await supabase
+        .from('chat_sessions')
+        .select('id, title, created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (error) return errorResponse(error.message, 500);
+      return jsonResponse({ sessions: sessions || [] });
+    }
+
+    if (path === '/instructor/sessions' && req.method === 'POST') {
+      const { data: newSession, error } = await supabase
+        .from('chat_sessions')
+        .insert({ user_id: userId, title: 'New Conversation' })
+        .select('id, title, created_at')
+        .single();
+
+      if (error) return errorResponse(error.message, 500);
+      return jsonResponse({ session: newSession }, 201);
+    }
+
+    const sessionMatch = path.match(/^\/instructor\/sessions\/([a-zA-Z0-9_-]+)$/);
+    if (sessionMatch && req.method === 'DELETE') {
+      const sessionId = sessionMatch[1];
+      await supabase.from('chat_messages').delete().eq('session_id', sessionId).eq('user_id', userId);
+      const { error } = await supabase.from('chat_sessions').delete().eq('id', sessionId).eq('user_id', userId);
+      if (error) return errorResponse(error.message, 500);
+      return jsonResponse({ success: true, id: sessionId });
+    }
+
+    const sessionMessagesMatch = path.match(/^\/instructor\/sessions\/([a-zA-Z0-9_-]+)\/messages$/);
+    if (sessionMessagesMatch && req.method === 'GET') {
+      const sessionId = sessionMessagesMatch[1];
+      const { data: messages, error } = await supabase
+        .from('chat_messages')
+        .select('role, content, tool_calls, created_at')
+        .eq('session_id', sessionId)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true });
+
+      if (error) return errorResponse(error.message, 500);
+      return jsonResponse({ messages: messages || [] });
+    }
+
+    if (path === '/instructor/history' && req.method === 'GET') {
+      const { data: session } = await supabase
+        .from('chat_sessions')
+        .select('id, title')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!session) {
+        return jsonResponse({ messages: [], sessionId: null });
+      }
+
+      const { data: messages } = await supabase
+        .from('chat_messages')
+        .select('role, content, tool_calls, created_at')
+        .eq('session_id', session.id)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true });
+
+      return jsonResponse({ messages: messages || [], sessionId: session.id });
+    }
+
+    // -----------------------------------------------------------------
+    // Vision OCR Endpoint
+    // -----------------------------------------------------------------
+    if (path === '/instructor/ocr' && req.method === 'POST') {
+      const body = await req.json().catch(() => ({}));
+      const imageBase64 = body.imageBase64;
+      if (!imageBase64 || typeof imageBase64 !== 'string') {
+        return errorResponse('imageBase64 string is required', 400);
+      }
+
+      if (!groqApiKey) {
+        return errorResponse('Groq API Key is not configured', 500);
+      }
+
+      const formattedUrl = imageBase64.startsWith('data:')
+        ? imageBase64
+        : `data:image/jpeg;base64,${imageBase64}`;
+
+      try {
+        const ocrRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${groqApiKey}`,
+          },
+          body: JSON.stringify({
+            model: 'qwen/qwen3.6-27b',
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  {
+                    type: 'text',
+                    text: 'Extract all problem text, math equations, and diagrams from this image. Format all mathematical equations into clean LaTeX ($...$ for inline, $$...$$ for block). Return ONLY the extracted problem content without preamble or conversational filler.',
+                  },
+                  {
+                    type: 'image_url',
+                    image_url: { url: formattedUrl },
+                  },
+                ],
+              },
+            ],
+            max_tokens: 1024,
+            temperature: 0.1,
+          }),
+        });
+
+        if (!ocrRes.ok) {
+          const errText = await ocrRes.text();
+          return errorResponse(`OCR processing failed: ${errText}`, ocrRes.status);
+        }
+
+        const ocrData = await ocrRes.json();
+        const extractedText = ocrData.choices?.[0]?.message?.content || '';
+        return jsonResponse({ extractedText });
+      } catch (ocrErr: any) {
+        return errorResponse(`OCR extraction error: ${ocrErr.message}`, 500);
+      }
+    }
+
     // -----------------------------------------------------------------
     // AI Instructor Socratic Chat (Groq API)
     // -----------------------------------------------------------------
     if (path === '/instructor/chat' && req.method === 'POST') {
       const body = await req.json().catch(() => ({}));
-      const message = body.message;
+      const rawMessage = body.message;
 
-      if (!message || typeof message !== 'string') {
-        return errorResponse('Message is required', 400);
+      if (!rawMessage || typeof rawMessage !== 'string' || !rawMessage.trim()) {
+        return errorResponse('Message is required and cannot be empty or whitespace only', 400);
       }
+
+      const trimmedMessage = rawMessage.trim();
+      if (trimmedMessage.length > 5000) {
+        return errorResponse('Message exceeds maximum allowed length (5000 characters)', 400);
+      }
+
+      if (!groqApiKey) {
+        return errorResponse('Groq API Key is not configured. Please ensure GROQ_API_KEY is set in Supabase secrets.', 500);
+      }
+
+      let promptForAgent = trimmedMessage;
+
+      // Handle attached image if present
+      if (body.imageBase64 && typeof body.imageBase64 === 'string' && body.imageBase64.trim()) {
+        const formattedUrl = body.imageBase64.startsWith('data:')
+          ? body.imageBase64
+          : `data:image/jpeg;base64,${body.imageBase64}`;
+
+        try {
+          const visionRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${groqApiKey}`,
+            },
+            body: JSON.stringify({
+              model: 'qwen/qwen3.6-27b',
+              messages: [
+                {
+                  role: 'user',
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'Extract all problem text, math equations, and diagrams from this image. Format all mathematical equations into clean LaTeX ($...$ for inline, $$...$$ for block). Return ONLY the extracted problem content without preamble or filler.',
+                    },
+                    {
+                      type: 'image_url',
+                      image_url: { url: formattedUrl },
+                    },
+                  ],
+                },
+              ],
+              max_tokens: 1024,
+              temperature: 0.1,
+            }),
+          });
+
+          if (visionRes.ok) {
+            const visionData = await visionRes.json();
+            const extracted = visionData.choices?.[0]?.message?.content?.trim();
+            if (extracted && extracted !== 'NONE') {
+              promptForAgent = `${trimmedMessage}\n\n[Attached Problem Image Content]:\n${extracted}`;
+            }
+          }
+        } catch (visErr: any) {
+          console.warn('Vision extraction error in Edge Function:', visErr.message);
+        }
+      }
+
+      // STRICT CHAT HISTORY SANITIZATION:
+      // Strip any client UI attributes (animate, image, toolExecutions, id, etc.)
+      // Groq will throw an error if ANY property other than role, content is sent!
+      const sanitizedHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+      if (Array.isArray(body.history)) {
+        for (const item of body.history) {
+          if (!item || typeof item !== 'object') continue;
+          if (item.role !== 'user' && item.role !== 'assistant') continue;
+          if (typeof item.content !== 'string' || !item.content.trim()) continue;
+
+          sanitizedHistory.push({
+            role: item.role,
+            content: item.content.trim(),
+          });
+        }
+      }
+
+      // Cap to latest 15 turns
+      const boundedHistory = sanitizedHistory.slice(-15);
 
       // Call Groq API for Socratic reasoning
       const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -388,15 +639,14 @@ Deno.serve(async (req: Request) => {
           Authorization: `Bearer ${groqApiKey}`,
         },
         body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
+          model: Deno.env.get('GROQ_MODEL') || 'openai/gpt-oss-120b',
           messages: [
             {
               role: 'system',
-              content:
-                'You are Pragati AI Instructor, a warm, encouraging, and rigorous Socratic learning mentor. Never give direct answers right away. Guide students with probing questions, analogies, and conceptual hints. Format equations in LaTeX ($...$). NEVER use emojis.',
+              content: SYSTEM_PROMPT,
             },
-            ...(Array.isArray(body.history) ? body.history : []),
-            { role: 'user', content: message },
+            ...boundedHistory,
+            { role: 'user', content: promptForAgent },
           ],
           temperature: 0.7,
         }),
@@ -408,11 +658,59 @@ Deno.serve(async (req: Request) => {
       }
 
       const groqData = await groqRes.json();
-      const reply = groqData.choices?.[0]?.message?.content || 'I could not process your request at this moment.';
+      const rawReply = groqData.choices?.[0]?.message?.content || 'I could not process your request at this moment.';
+      const cleanReply = rawReply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+      // Save to chat_messages if session provided
+      if (body.sessionId && body.sessionId !== 'new') {
+        await supabase.from('chat_messages').insert([
+          { session_id: body.sessionId, user_id: userId, role: 'user', content: trimmedMessage },
+          { session_id: body.sessionId, user_id: userId, role: 'assistant', content: cleanReply, tool_calls: [] },
+        ]);
+      }
+
+      // Support Server-Sent Events (SSE) streaming if requested by client
+      if (req.headers.get('Accept')?.includes('text/event-stream')) {
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({
+                  type: 'step',
+                  phase: 'thinking',
+                  text: 'Formulating Socratic guidance...',
+                })}\n\n`
+              )
+            );
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({
+                  type: 'done',
+                  reply: cleanReply,
+                  toolExecutions: [],
+                  sessionId: body.sessionId,
+                })}\n\n`
+              )
+            );
+            controller.close();
+          },
+        });
+
+        return new Response(stream, {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+          },
+        });
+      }
 
       return jsonResponse({
-        reply,
+        reply: cleanReply,
         toolExecutions: [],
+        sessionId: body.sessionId,
       });
     }
 

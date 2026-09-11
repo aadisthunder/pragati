@@ -202,8 +202,11 @@ export const InstructorPage: React.FC = () => {
 
     const imagePayload = attachedImage?.base64;
 
-    // Send history of previous turns (before adding current message) to prevent duplicate messages
-    const historyPayload = messages.slice(-8);
+    // Send clean history of previous turns (strictly role & content, stripping UI fields like animate/image)
+    const historyPayload = messages
+      .slice(-10)
+      .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
+      .map((m) => ({ role: m.role, content: m.content.trim() }));
 
     const newMessages: Message[] = [
       ...messages,

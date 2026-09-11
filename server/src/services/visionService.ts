@@ -109,17 +109,17 @@ export async function extractTextFromImage(imageBase64: string): Promise<string>
 
   // 1. Primary: Groq Multimodal Vision (fast LPU latency, clean LaTeX extraction)
   try {
-    const primaryVisionLlm = getLLM(visionModel, 0.1, 300, 0, 8000);
+    const primaryVisionLlm = getLLM(visionModel, 0.1, 300, 0, 5000);
     const response = await primaryVisionLlm.invoke([message]);
     rawExtracted = typeof response.content === 'string' ? response.content.trim() : JSON.stringify(response.content);
   } catch (err: any) {
-    console.warn('Groq primary vision call failed, trying fallback:', err.message);
+    console.warn('Groq primary vision call failed:', err.message);
   }
 
   // 2. Fallback to secondary vision model if primary failed or returned empty
   if (!rawExtracted || rawExtracted === 'NONE') {
     try {
-      const fallbackVisionLlm = getLLM('qwen/qwen3.8-27b', 0.1, 300, 0, 8000);
+      const fallbackVisionLlm = getLLM('qwen/qwen3.8-27b', 0.1, 300, 0, 5000);
       const fbResponse = await fallbackVisionLlm.invoke([message]);
       rawExtracted = typeof fbResponse.content === 'string' ? fbResponse.content.trim() : JSON.stringify(fbResponse.content);
     } catch (fbErr: any) {

@@ -1,6 +1,6 @@
 import express, { Router, Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/authMiddleware.js';
-import { processAgentChat, getLLM } from '../agent/langchainAgent.js';
+import { processAgentChat, getLLM, validateChatMessage, sanitizeChatHistory } from '../agent/langchainAgent.js';
 import { createScopedClient } from '../config/supabase.js';
 import { extractTextFromImage } from '../services/visionService.js';
 
@@ -15,14 +15,23 @@ instructorRouter.post(
     const token = req.token!;
     const { message, history, sessionId, imageBase64 } = req.body;
 
-    if (!message || typeof message !== 'string') {
-      res.status(400).json({ error: 'Message is required' });
+    const validation = validateChatMessage(message);
+    if (!validation.valid) {
+      res.status(400).json({ error: validation.error });
       return;
     }
+    const cleanUserMessage = validation.cleanMessage!;
+    const cleanHistory = sanitizeChatHistory(history);
 
-    if (message.length > 5000) {
-      res.status(400).json({ error: 'Message exceeds maximum allowed length (5000 characters)' });
-      return;
+    if (imageBase64 !== undefined && imageBase64 !== null) {
+      if (typeof imageBase64 !== 'string' || !imageBase64.trim()) {
+        res.status(400).json({ error: 'Invalid imageBase64 format' });
+        return;
+      }
+      if (imageBase64.length > 7 * 1024 * 1024) {
+        res.status(400).json({ error: 'Image exceeds maximum allowed size (5MB)' });
+        return;
+      }
     }
 
     const isStream = req.headers.accept?.includes('text/event-stream') || req.query.stream === 'true';
@@ -43,7 +52,7 @@ instructorRouter.post(
     };
 
     try {
-      let promptForAgent = message;
+      let promptForAgent = cleanUserMessage;
 
       // If an image was attached, extract its problem/math details via fast multimodal vision
       if (imageBase64 && typeof imageBase64 === 'string') {
@@ -55,14 +64,14 @@ instructorRouter.post(
         try {
           const extractedProblem = await extractTextFromImage(imageBase64);
           if (extractedProblem && extractedProblem.trim()) {
-            promptForAgent = `${message}\n\n[Attached Problem Image Content]:\n${extractedProblem.trim()}`;
+            promptForAgent = `${cleanUserMessage}\n\n[Attached Problem Image Content]:\n${extractedProblem.trim()}`;
           }
         } catch (ocrErr: any) {
           console.warn('In-chat vision extraction warning:', ocrErr.message);
         }
       }
 
-      const result = await processAgentChat(userId, promptForAgent, history || [], token, sendStep);
+      const result = await processAgentChat(userId, promptForAgent, cleanHistory, token, sendStep);
 
     // Save message pair to chat_messages if session exists
     const scopedClient = createScopedClient(token);

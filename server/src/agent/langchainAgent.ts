@@ -157,6 +157,62 @@ export function extractToolCalls(aiResponse: any): Array<{ id?: string; name: st
   return calls;
 }
 
+/**
+ * Strictly sanitizes client-provided chat history to match the standard LLM/OpenAI schema.
+ * Strips all client UI attributes (animate, image, id, etc.) and ensures valid roles and non-empty content.
+ */
+export function sanitizeChatHistory(
+  history: any,
+  maxAllowedTurns: number = 20
+): Array<{ role: 'user' | 'assistant'; content: string }> {
+  if (!Array.isArray(history)) return [];
+
+  const sanitized: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+
+  for (const item of history) {
+    if (!item || typeof item !== 'object') continue;
+    const role = item.role;
+    if (role !== 'user' && role !== 'assistant') continue;
+
+    const rawContent = item.content;
+    if (typeof rawContent !== 'string') continue;
+    const trimmed = rawContent.trim();
+    if (!trimmed) continue;
+
+    sanitized.push({
+      role,
+      content: trimmed,
+    });
+  }
+
+  // Cap to maxAllowedTurns (keeping the latest turns)
+  if (sanitized.length > maxAllowedTurns) {
+    return sanitized.slice(-maxAllowedTurns);
+  }
+
+  return sanitized;
+}
+
+/**
+ * Validates a user's input chat message.
+ */
+export function validateChatMessage(message: any): { valid: boolean; error?: string; cleanMessage?: string } {
+  if (!message || typeof message !== 'string') {
+    return { valid: false, error: 'Message is required' };
+  }
+
+  const trimmed = message.trim();
+  if (trimmed.length === 0) {
+    return { valid: false, error: 'Message cannot be empty or whitespace only' };
+  }
+
+  if (message.length > 5000) {
+    return { valid: false, error: 'Message exceeds maximum allowed length (5000 characters)' };
+  }
+
+  return { valid: true, cleanMessage: trimmed };
+}
+
 export type AgentStepCallback = (step: { phase: string; text: string; tool?: string }) => void;
 
 const FRIENDLY_TOOL_STATUS: Record<string, string> = {
@@ -169,12 +225,13 @@ const FRIENDLY_TOOL_STATUS: Record<string, string> = {
 export async function processAgentChat(
   userId: string,
   userMessage: string,
-  history: Array<{ role: string; content: string }> = [],
+  history: any = [],
   userToken: string,
   onStep?: AgentStepCallback
 ) {
   onStep?.({ phase: 'thinking', text: 'AI Instructor is thinking...' });
 
+  const cleanHistory = sanitizeChatHistory(history);
   const scopedClient = createScopedClient(userToken);
   const llm = getLLM(process.env.GROQ_MODEL || 'openai/gpt-oss-120b', 0.2);
   const tools = createAgentTools(scopedClient, userId, llm);
@@ -183,7 +240,7 @@ export async function processAgentChat(
 
   // Convert history into LangChain messages
   const messages: any[] = [new SystemMessage(SYSTEM_PROMPT)];
-  for (const msg of history) {
+  for (const msg of cleanHistory) {
     if (msg.role === 'user') messages.push(new HumanMessage(msg.content));
     else if (msg.role === 'assistant') messages.push(new AIMessage(msg.content));
   }

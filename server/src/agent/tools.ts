@@ -5,8 +5,8 @@ import { SupabaseClient } from '@supabase/supabase-js';
 
 export const generateQuizSchema = z.object({
   topic: z.string().min(1, 'Topic is required'),
-  difficulty: z.enum(['beginner', 'intermediate', 'advanced']).default('intermediate'),
-  num_questions: z.number().min(1).max(10).default(5),
+  difficulty: z.enum(['beginner', 'intermediate', 'advanced']).nullable().optional().default('intermediate'),
+  num_questions: z.number().min(1).max(10).nullable().optional().default(5),
 });
 
 export const getAttemptTelemetrySchema = z.object({
@@ -18,7 +18,7 @@ export const explainMissedQuestionSchema = z.object({
 });
 
 export const getStudentAttemptsSchema = z.object({
-  limit: z.number().min(1).max(20).default(5),
+  limit: z.number().min(1).max(20).nullable().optional().default(5),
 });
 
 /**
@@ -113,11 +113,13 @@ export function createAgentTools(supabaseClient: SupabaseClient, userId: string,
   const generateQuizTool = tool(
     async ({ topic, difficulty, num_questions }) => {
       try {
-        const prompt = `You are a curriculum expert. Generate a structured ${difficulty} level multiple-choice quiz on the topic "${topic}" with exactly ${num_questions} questions.
+        const selectedDifficulty = difficulty || 'intermediate';
+        const count = num_questions || 5;
+        const prompt = `You are a curriculum expert. Generate a structured ${selectedDifficulty} level multiple-choice quiz on the topic "${topic}" with exactly ${count} questions.
 Return ONLY a valid JSON object matching this exact structure, with no markdown code fences or backticks:
 {
   "topic": "${topic}",
-  "difficulty": "${difficulty}",
+  "difficulty": "${selectedDifficulty}",
   "questions": [
     {
       "prompt": "Question text with LaTeX if applicable",
@@ -228,7 +230,7 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
           .select('id, quiz_id, score, total_questions, accuracy_pct, total_time_sec, completed_at, quizzes(topic, difficulty)')
           .eq('user_id', userId)
           .order('completed_at', { ascending: false })
-          .limit(limit);
+          .limit(limit || 5);
 
         if (error) return `Error fetching quiz history: ${error.message}`;
         if (!attempts || attempts.length === 0) return 'The student has not attempted any quizzes yet.';

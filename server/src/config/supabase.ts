@@ -20,7 +20,7 @@ dotenv.config();
 
 const getSupabaseConfig = () => ({
   url: process.env.SUPABASE_URL || '',
-  anonKey: process.env.SUPABASE_ANON_KEY || 'mock-anon-key',
+  anonKey: process.env.SUPABASE_ANON_KEY || '',
 });
 
 export const supabase = createClient(

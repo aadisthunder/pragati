@@ -76,8 +76,8 @@ quizRouter.post('/:id/submit', async (req: AuthenticatedRequest, res: Response):
   const userId = req.user!.id;
   const { answers } = req.body;
 
-  if (!Array.isArray(answers)) {
-    res.status(400).json({ error: 'answers must be an array' });
+  if (!Array.isArray(answers) || answers.length === 0) {
+    res.status(400).json({ error: 'answers must be a non-empty array' });
     return;
   }
 
@@ -88,7 +88,7 @@ quizRouter.post('/:id/submit', async (req: AuthenticatedRequest, res: Response):
       .select('id, correct_answer, explanation, prompt')
       .eq('quiz_id', quizId);
 
-    if (qError || !questions) {
+    if (qError || !questions || questions.length === 0) {
       res.status(500).json({ error: 'Failed to retrieve quiz questions' });
       return;
     }
@@ -103,6 +103,8 @@ quizRouter.post('/:id/submit', async (req: AuthenticatedRequest, res: Response):
 
       const is_skipped = !ans.selected_answer;
       const is_correct = !is_skipped && ans.selected_answer === q.correct_answer;
+      const dwell = Math.max(0, Math.min(7200, Number(ans.dwell_time_sec) || 0));
+      const hints = Math.max(0, Math.min(10, Number(ans.hints_used) || 0));
 
       evaluatedTelemetry.push({
         question_id: ans.question_id,
@@ -110,8 +112,8 @@ quizRouter.post('/:id/submit', async (req: AuthenticatedRequest, res: Response):
         selected_answer: ans.selected_answer || null,
         is_correct,
         is_skipped,
-        dwell_time_sec: ans.dwell_time_sec || 0,
-        hints_used: ans.hints_used || 0,
+        dwell_time_sec: dwell,
+        hints_used: hints,
         correct_answer: q.correct_answer,
         explanation: q.explanation,
         prompt: q.prompt,

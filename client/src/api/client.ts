@@ -11,12 +11,27 @@ export { getFromCache, isCacheFresh, setInCache, invalidateCache };
 
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
-export function resolveApiUrl(endpoint: string): string {
+export function formatApiUrl(base: string, endpoint: string): string {
   if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {
     return endpoint;
   }
+  const cleanBase = (base || '').replace(/\/$/, '');
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  return API_BASE ? `${API_BASE}${cleanEndpoint}` : cleanEndpoint;
+
+  if (!cleanBase) {
+    return cleanEndpoint;
+  }
+
+  // Deduplicate /api if base already ends with /api and endpoint starts with /api/
+  if (cleanBase.endsWith('/api') && cleanEndpoint.startsWith('/api/')) {
+    return `${cleanBase}${cleanEndpoint.slice(4)}`;
+  }
+
+  return `${cleanBase}${cleanEndpoint}`;
+}
+
+export function resolveApiUrl(endpoint: string): string {
+  return formatApiUrl(API_BASE, endpoint);
 }
 
 export async function apiRequest<T = any>(
@@ -128,6 +143,11 @@ export async function apiStreamRequest(
   if (!response.ok) {
     const errData = await response.json().catch(() => ({}));
     throw new Error(errData.error || `Request failed with status ${response.status}`);
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('text/event-stream')) {
+    return await response.json().catch(() => ({}));
   }
 
   if (!response.body) {
