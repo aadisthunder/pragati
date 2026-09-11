@@ -48,12 +48,13 @@
 
 ## Overview
 
-**Pragati** (*Sanskrit for "Progress"*) is an AI-driven academic learning platform engineered to address the fundamental flaw in modern search engines and standard AI chat bots: **they give away flat answers without teaching**. 
+**Pragati** (*Sanskrit for "Progress"*) is an AI-driven academic learning platform engineered around an active **Closed-Loop Mastery Framework**. Rather than simply explaining answers or acting like a passive chat bot, Pragati helps students deeply learn any topic or subtopic, challenge their understanding through adaptive testing, diagnose weak spots with cognitive telemetry, and systematically review and re-learn missed concepts until 100% mastery is achieved.
 
-Pragati combines:
-1. **Socratic AI Tutoring**: Step-by-step guidance through first principles using Groq's high-speed LPU inference.
-2. **Cognitive Telemetry**: Granular tracking of question dwell time, hint usage, and mistake patterns.
-3. **Dynamic Assessment Arena**: Automatic generation of multiple-choice tests tailored to the student's mastery level and performance telemetry.
+Pragati unites:
+1. **Deep Socratic Learning**: Active conceptual exploration through first-principles questioning and step-by-step guidance.
+2. **On-Demand Adaptive Testing**: Multi-level assessment generation triggered when the student feels ready, complete with in-quiz scaffolding and hints.
+3. **Cognitive Telemetry**: Precision tracking of per-question dwell time, hint dependencies, and hesitation patterns.
+4. **Targeted Review & Re-Teaching**: Dedicated remediation in the Analytics suite where the AI teaches the exact concepts behind incorrect answers in a continuous loop to mastery.
 
 ---
 
@@ -68,17 +69,22 @@ The production application is live and accessible:
 
 ## Core Features
 
-### 1. Socratic AI Instructor
+### 1. The Closed-Loop Mastery System (Core Experience)
+The defining feature of Pragati is its self-reinforcing mastery cycle that transforms passive studying into verified conceptual competence:
+- **Deep Conceptual Study**: Engage with the AI to deeply learn any topic or granular subtopic through first-principles reasoning without being spoon-fed answers.
+- **On-Demand Adaptive Testing**: Whenever a student feels they have grasped a topic sufficiently, the AI agent generates a comprehensive test tailored to those exact topics across selectable difficulty levels (Beginner, Intermediate, Advanced).
+- **In-Test Scaffolding & Hints**: While testing, students can request contextual hints if stuck, nudging critical thinking without spoiling the answer.
+- **Cognitive Telemetry & Weak-Spot Diagnostics**: As tests are submitted, Pragati records dwell time per question, hint consumption, and accuracy to pinpoint specific conceptual vulnerabilities.
+- **Targeted "Questions to Review" Re-Teaching**: On the Analytics page, a dedicated **Questions to Review** hub compiles every missed or skipped question. With a single click, the AI instructor steps in to actively re-teach the underlying concepts.
+- **Iterative Loop to True Mastery**: Students retake assessments and review weak concepts in an ongoing loop until every topic is fully mastered.
+
+### 2. Socratic AI Instructor & Multimodal Capture
 - **First-Principles Dialogue**: Guides students with targeted questions, scaffolding, and hints rather than dumping direct solutions.
 - **Sub-Second Streaming**: Powered by Groq LPU hardware with Time-to-First-Token (TTFT) under 300ms.
 - **Pristine KaTeX Math Rendering**: Flawless inline ($E = mc^2$) and block ($$\int_a^b f(x)\,dx$$) scientific typesetting.
 - **Dynamic Tool Calling**: Uses LangChain tools to inspect quiz history, diagnose missed questions, and generate assessments on the fly.
+- **Multimodal Problem Snapshot Capture**: Slide-up camera and photo gallery sheet allowing students to capture physical textbook problems, handwritten equations, or diagrams, with LaTeX OCR via Groq multimodal vision (`qwen/qwen3.6-27b`).
 - **Single-Line Responsive Quick Chips**: Fast one-click prompt pills (*Ask a doubt*, *Request a quiz topic*, *Review performance*, *Review missed questions*) displayed in a clean single line on desktop and swipeable on mobile.
-
-### 2. Multimodal Problem Snapshot Capture
-- **Camera & Photo Gallery Sheet**: Slide-up modal allowing students to photograph physical textbook problems or upload diagrams.
-- **LaTeX Math OCR**: Extracts mathematical equations, formulas, and diagrams using Groq multimodal vision (`qwen/qwen3.6-27b`).
-- **Fail-Safe Processing**: Client-side image compression and server-side timeouts ensure zero UI blocking.
 
 ### 3. Interactive Quiz Arena
 - **Dynamic Curriculum Generation**: AI crafts custom 3-to-10 question quizzes on any STEM topic with 4 choices, hints, and explanations.
@@ -86,6 +92,7 @@ The production application is live and accessible:
 - **Immediate Socratic Remediation**: One-click transition from any missed question directly into a 1-on-1 tutoring session with the AI Instructor.
 
 ### 4. Telemetry-Driven Student Analytics
+- **"Questions to Review" Hub**: Centralized review arena that lists all incorrect/skipped questions with one-click AI tutoring sessions.
 - **Cognitive Metrics**: Dwell-time distribution, hint consumption velocity, and accuracy progression curves.
 - **Topic Mastery Breakdown**: Visual progress bars categorizing student proficiency into Beginner, Intermediate, and Advanced tiers.
 - **Adaptive Elo Rating**: Skill rating recalculation engine reflecting conceptual growth over time.
