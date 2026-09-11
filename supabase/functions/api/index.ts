@@ -43,9 +43,9 @@ Deno.serve(async (req: Request) => {
   let path = url.pathname.replace(/^\/functions\/v1\/api/, '').replace(/^\/api/, '');
   if (!path || path === '') path = '/';
 
-  // Environment variables
-  const supabaseUrl = Deno.env.get('SUPABASE_URL') || 'https://rraemkgnxfrcdjfvpiml.supabase.co';
-  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJyYWVta2dueGZyY2RqZnZwaW1sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2NzI4MjEsImV4cCI6MjEwMzI0ODgyMX0.3Yhjh-aG_e79nQQA43NbSLDLEhUN-JcVyjeB-Xq6zd0';
+  // Environment variables (automatically injected by Supabase Edge Runtime)
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
   const groqApiKey = Deno.env.get('GROQ_API_KEY') || '';
 
   // Health check endpoint

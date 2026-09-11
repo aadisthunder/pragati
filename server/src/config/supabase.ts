@@ -19,7 +19,7 @@ for (const envPath of envCandidates) {
 dotenv.config();
 
 const getSupabaseConfig = () => ({
-  url: process.env.SUPABASE_URL || 'https://rraemkgnxfrcdjfvpiml.supabase.co',
+  url: process.env.SUPABASE_URL || '',
   anonKey: process.env.SUPABASE_ANON_KEY || 'mock-anon-key',
 });
 
