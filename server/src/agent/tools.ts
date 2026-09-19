@@ -21,6 +21,14 @@ export const getStudentAttemptsSchema = z.object({
   limit: z.number().min(1).max(20).nullable().optional().default(5),
 });
 
+export const getStudentPerformanceSchema = z.object({
+  limit: z.number().min(1).max(20).nullable().optional().default(5),
+});
+
+export const getQuestionsToReviewSchema = z.object({
+  limit: z.number().min(1).max(20).nullable().optional().default(10),
+});
+
 /**
  * Robust JSON extractor for LLM-generated quiz payloads.
  * Strips conversational preambles, markdown code fences, and repairs unclosed braces.
@@ -100,9 +108,13 @@ export function sanitizeToolArgs(toolName: string, rawArgs: any = {}, userMessag
     if (!args.difficulty || typeof args.difficulty !== 'string') {
       args.difficulty = 'intermediate';
     }
-  } else if (toolName === 'get_student_attempts') {
+  } else if (toolName === 'get_student_attempts' || toolName === 'get_student_performance') {
     if (!args.limit || typeof args.limit !== 'number') {
       args.limit = 5;
+    }
+  } else if (toolName === 'get_questions_to_review') {
+    if (!args.limit || typeof args.limit !== 'number') {
+      args.limit = 10;
     }
   }
 
@@ -306,5 +318,152 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
     }
   );
 
-  return [generateQuizTool, getStudentAttemptsTool, getAttemptTelemetryTool, explainMissedQuestionTool];
+  const getStudentPerformanceTool = tool(
+    async ({ limit }) => {
+      try {
+        const { data: profile } = await supabaseClient
+          .from('user_profiles')
+          .select('skill_rating, full_name')
+          .eq('id', userId)
+          .maybeSingle();
+
+        const { data: attempts, error } = await supabaseClient
+          .from('quiz_attempts')
+          .select('id, quiz_id, score, total_questions, accuracy_pct, total_time_sec, completed_at, quizzes(topic, difficulty)')
+          .eq('user_id', userId)
+          .order('completed_at', { ascending: false })
+          .limit(limit || 5);
+
+        if (error) {
+          return JSON.stringify({
+            action: 'ERROR',
+            error: `Failed to retrieve performance: ${error.message}`,
+          });
+        }
+
+        const attemptsList = attempts || [];
+        if (attemptsList.length === 0) {
+          return JSON.stringify({
+            action: 'PERFORMANCE_RETRIEVED',
+            has_attempts: false,
+            skill_rating: profile?.skill_rating || 1200,
+            overall_accuracy: 0,
+            total_attempts: 0,
+            recent_attempts: [],
+            message: 'You have not completed any quizzes yet. Take your first quiz in the Quizzes Arena to build your performance profile!',
+          });
+        }
+
+        let totalScore = 0;
+        let totalQuestions = 0;
+        for (const att of attemptsList) {
+          totalScore += att.score || 0;
+          totalQuestions += att.total_questions || 0;
+        }
+
+        const overallAccuracy = totalQuestions > 0 ? Number(((totalScore / totalQuestions) * 100).toFixed(1)) : 0;
+
+        return JSON.stringify({
+          action: 'PERFORMANCE_RETRIEVED',
+          has_attempts: true,
+          skill_rating: profile?.skill_rating || 1200,
+          overall_accuracy: overallAccuracy,
+          total_attempts: attemptsList.length,
+          recent_attempts: attemptsList.map((a: any) => ({
+            id: a.id,
+            topic: (a.quizzes as any)?.topic || 'General',
+            difficulty: (a.quizzes as any)?.difficulty || 'intermediate',
+            score: a.score,
+            total_questions: a.total_questions,
+            accuracy_pct: a.accuracy_pct,
+            completed_at: a.completed_at,
+          })),
+        });
+      } catch (err: any) {
+        return JSON.stringify({
+          action: 'ERROR',
+          error: `Error retrieving performance data: ${err.message}`,
+        });
+      }
+    },
+    {
+      name: 'get_student_performance',
+      description: 'Fetches the student overall academic performance report, including dynamic Skill Rating, overall accuracy percentage, and recent quiz scores.',
+      schema: getStudentPerformanceSchema,
+    }
+  );
+
+  const getQuestionsToReviewTool = tool(
+    async ({ limit }) => {
+      try {
+        const { data: missedQuestions, error } = await supabaseClient
+          .from('question_telemetry')
+          .select('id, question_id, attempt_id, selected_answer, is_correct, is_skipped, dwell_time_sec, hints_used, created_at, questions(prompt, options, correct_answer, explanation, quiz_id, quizzes(topic))')
+          .eq('user_id', userId)
+          .or('is_correct.eq.false,is_skipped.eq.true')
+          .order('created_at', { ascending: false })
+          .limit(limit || 10);
+
+        if (error) {
+          return JSON.stringify({
+            action: 'ERROR',
+            error: `Failed to retrieve questions to review: ${error.message}`,
+          });
+        }
+
+        const list = (missedQuestions || []).map((m: any) => ({
+          id: m.id,
+          question_id: m.question_id,
+          topic: (m.questions as any)?.quizzes?.topic || 'General',
+          prompt: (m.questions as any)?.prompt || '',
+          options: (m.questions as any)?.options || [],
+          selected_answer: m.selected_answer,
+          correct_answer: (m.questions as any)?.correct_answer,
+          explanation: (m.questions as any)?.explanation,
+          dwell_time_sec: m.dwell_time_sec,
+          hints_used: m.hints_used,
+          is_skipped: m.is_skipped,
+        }));
+
+        if (list.length === 0) {
+          return JSON.stringify({
+            action: 'QUESTIONS_TO_REVIEW_RETRIEVED',
+            has_questions: false,
+            total_missed: 0,
+            questions: [],
+            message: 'Great job! You have zero unreviewed missed questions.',
+          });
+        }
+
+        const topics = Array.from(new Set(list.map((q: any) => q.topic)));
+
+        return JSON.stringify({
+          action: 'QUESTIONS_TO_REVIEW_RETRIEVED',
+          has_questions: true,
+          total_missed: list.length,
+          topics,
+          questions: list,
+        });
+      } catch (err: any) {
+        return JSON.stringify({
+          action: 'ERROR',
+          error: `Error retrieving questions to review: ${err.message}`,
+        });
+      }
+    },
+    {
+      name: 'get_questions_to_review',
+      description: 'Connects directly to the Analytics Questions to Review section. Fetches the student struggling, missed, and skipped questions with explanations and chosen answers for Socratic tutoring.',
+      schema: getQuestionsToReviewSchema,
+    }
+  );
+
+  return [
+    generateQuizTool,
+    getStudentPerformanceTool,
+    getQuestionsToReviewTool,
+    getStudentAttemptsTool,
+    getAttemptTelemetryTool,
+    explainMissedQuestionTool,
+  ];
 }

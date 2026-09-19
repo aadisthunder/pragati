@@ -27,6 +27,8 @@ import {
   Loader2,
   ArrowRight,
   AlertCircle,
+  BarChart2,
+  BookOpen,
 } from 'lucide-react';
 
 export interface AttachedImage {
@@ -332,7 +334,7 @@ export const InstructorPage: React.FC = () => {
   };
 
   return (
-    <div className="relative flex flex-col h-full max-w-5xl mx-auto w-full font-sans overflow-hidden">
+    <div className="relative flex flex-col h-full w-full font-sans overflow-hidden">
       {/* Hidden File Inputs for Camera and Gallery */}
       <input
         type="file"
@@ -352,7 +354,7 @@ export const InstructorPage: React.FC = () => {
 
       {/* Case 1: Centered Hero Layout on New/Empty Chat */}
       {messages.length === 0 && !loading ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-4 max-w-2xl mx-auto w-full text-center space-y-6 animate-in fade-in duration-300">
+        <div className="flex-1 flex flex-col items-center justify-center p-4 max-w-3xl mx-auto w-full text-center space-y-6 animate-in fade-in duration-300">
           <div className="space-y-3 flex flex-col items-center">
             <img
               src="/logo.png"
@@ -436,153 +438,230 @@ export const InstructorPage: React.FC = () => {
       ) : (
         /* Case 2: Conversation Message Feed & Floating Bottom Dock */
         <>
-          {/* Scrollable Message Feed - pb-32 allows messages to scroll behind floating dock, pt-14 provides mobile clearance below floating buttons */}
-          <div className="flex-1 overflow-y-auto subtle-scroll px-3 sm:px-4 md:px-6 pt-14 sm:pt-3 pb-32 sm:pb-36 space-y-2.5 sm:space-y-3">
-            {/* Chat Messages Feed */}
-            {messages.map((msg, idx) => {
-              const isUser = msg.role === 'user';
-              return (
-                <div
-                  key={idx}
-                  className={`w-full flex ${isUser ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div className={`max-w-2xl flex flex-col ${isUser ? 'items-end' : 'items-start'} space-y-2`}>
-                    <div
-                      className={`px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl sm:rounded-2xl text-xs sm:text-[13.5px] leading-normal sm:leading-relaxed ${
-                        isUser
-                          ? 'bg-slate-900 text-white rounded-tr-none shadow-xs'
-                          : 'bg-white text-slate-900 rounded-tl-none shadow-xs'
-                      }`}
-                    >
-                      {/* Attached Image Thumbnail inside User Message Bubble */}
-                      {isUser && msg.image && (
-                        <div
-                          onClick={() => setLightboxImage(msg.image || null)}
-                          className="mb-2 max-w-[170px] sm:max-w-[210px] rounded-lg sm:rounded-xl overflow-hidden border border-white/20 shadow-xs cursor-pointer group relative transition-transform duration-200 hover:scale-[1.02] active:scale-[0.99]"
-                          title="Click to view full image"
-                        >
-                          <img
-                            src={msg.image}
-                            alt="Uploaded problem"
-                            className="w-full h-auto object-cover max-h-40 sm:max-h-48 rounded-lg sm:rounded-xl"
-                          />
-                          <div className="absolute inset-0 bg-slate-900/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[1px]">
-                            <span className="text-[10px] font-semibold text-white bg-slate-900/70 px-2 py-0.5 rounded-full border border-white/20">
-                              Expand
-                            </span>
+          {/* Scrollable Message Feed - pb-48 sm:pb-52 allows messages to scroll behind floating dock, pt-14 provides mobile clearance below floating buttons */}
+          <div className="flex-1 overflow-y-auto subtle-scroll px-3 sm:px-4 md:px-6 pt-14 sm:pt-4 pb-48 sm:pb-52">
+            <div className="w-full max-w-3xl mx-auto space-y-4 sm:space-y-6">
+              {/* Chat Messages Feed */}
+              {messages.map((msg, idx) => {
+                const isUser = msg.role === 'user';
+                return (
+                  <div
+                    key={idx}
+                    className={`w-full flex ${isUser ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div className={`${isUser ? 'max-w-[85%] sm:max-w-xl' : 'w-full'} flex flex-col ${isUser ? 'items-end' : 'items-start'} space-y-2`}>
+                      <div
+                        className={`text-xs sm:text-[13.5px] leading-normal sm:leading-relaxed ${
+                          isUser
+                            ? 'px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl sm:rounded-2xl bg-slate-900 text-white rounded-tr-none shadow-xs'
+                            : 'w-full px-4 py-3 sm:px-5 sm:py-3.5 rounded-xl sm:rounded-2xl bg-white text-slate-900 border border-slate-200/80 shadow-xs'
+                        }`}
+                      >
+                        {/* Attached Image Thumbnail inside User Message Bubble */}
+                        {isUser && msg.image && (
+                          <div
+                            onClick={() => setLightboxImage(msg.image || null)}
+                            className="mb-2 max-w-[170px] sm:max-w-[210px] rounded-lg sm:rounded-xl overflow-hidden border border-white/20 shadow-xs cursor-pointer group relative transition-transform duration-200 hover:scale-[1.02] active:scale-[0.99]"
+                            title="Click to view full image"
+                          >
+                            <img
+                              src={msg.image}
+                              alt="Uploaded problem"
+                              className="w-full h-auto object-cover max-h-40 sm:max-h-48 rounded-lg sm:rounded-xl"
+                            />
+                            <div className="absolute inset-0 bg-slate-900/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[1px]">
+                              <span className="text-[10px] font-semibold text-white bg-slate-900/70 px-2 py-0.5 rounded-full border border-white/20">
+                                Expand
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      {isUser ? (
-                        <div className="prose prose-sm max-w-none text-white prose-p:my-1">
-                          <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-                            {msg.content}
-                          </ReactMarkdown>
-                        </div>
-                      ) : (
-                        <TypewriterMessage
-                          content={msg.content}
-                          animate={msg.animate}
-                          speedMs={12}
-                          onUpdate={() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' })}
-                        />
-                      )}
+                        {isUser ? (
+                          <div className="prose prose-sm max-w-none text-white prose-p:my-1">
+                            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                              {msg.content}
+                            </ReactMarkdown>
+                          </div>
+                        ) : (
+                          <TypewriterMessage
+                            content={msg.content}
+                            animate={msg.animate}
+                            speedMs={12}
+                            onUpdate={() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                          />
+                        )}
+                      </div>
+
+                      {/* Render In-Chat Interactive Quiz Card if tool was executed */}
+                      {msg.tool_calls &&
+                        msg.tool_calls.map((tc, tcIdx) => {
+                          let parsedResult: any = null;
+                          try {
+                            parsedResult = typeof tc.result === 'string' ? JSON.parse(tc.result) : tc.result;
+                          } catch {}
+
+                          if (parsedResult && parsedResult.action === 'QUIZ_GENERATED') {
+                            return (
+                              <div
+                                key={tcIdx}
+                                className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs w-full max-w-md animate-in fade-in duration-300"
+                              >
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <span className="text-[10px] font-bold text-slate-800 uppercase tracking-wider bg-white px-2 py-0.5 rounded-full border border-slate-200 font-display">
+                                    Quiz Ready
+                                  </span>
+                                  <span className="text-[11px] font-semibold text-slate-500 capitalize">
+                                    {parsedResult.difficulty} Difficulty
+                                  </span>
+                                </div>
+                                <h4 className="text-xs sm:text-sm font-display font-bold text-slate-900">{parsedResult.topic}</h4>
+                                <p className="text-xs text-slate-600 mt-0.5">
+                                  Assessment with {parsedResult.total_questions} questions and granular dwell time tracking.
+                                </p>
+                                <button
+                                  onClick={() => navigate(`/quizzes/${parsedResult.quiz_id}`)}
+                                  className="mt-2.5 w-full inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 sm:py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors shadow-xs font-display cursor-pointer"
+                                >
+                                  <CheckSquare className="w-3.5 h-3.5" />
+                                  <span>Start Quiz Now</span>
+                                  <ArrowRight className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            );
+                          }
+
+                          if (parsedResult && parsedResult.action === 'PERFORMANCE_RETRIEVED') {
+                            return (
+                              <div
+                                key={tcIdx}
+                                className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs w-full max-w-md animate-in fade-in duration-300"
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-[10px] font-bold text-slate-800 uppercase tracking-wider bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200 font-display flex items-center gap-1">
+                                    <BarChart2 className="w-3 h-3 text-slate-700" />
+                                    Performance Report
+                                  </span>
+                                  <span className="text-[11px] font-semibold text-slate-500">
+                                    Rating: {parsedResult.skill_rating ?? 'N/A'}
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 my-2 py-2 border-y border-slate-100">
+                                  <div>
+                                    <span className="text-[10px] text-slate-400 font-medium block">Overall Accuracy</span>
+                                    <span className="text-sm font-bold text-slate-800 font-display">{parsedResult.overall_accuracy}%</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-[10px] text-slate-400 font-medium block">Recent Quizzes</span>
+                                    <span className="text-sm font-bold text-slate-800 font-display">{parsedResult.recent_attempts_count} recorded</span>
+                                  </div>
+                                </div>
+                                <p className="text-xs text-slate-600 mt-1">
+                                  {parsedResult.summary || 'Comprehensive telemetry and mastery radar available.'}
+                                </p>
+                                <button
+                                  onClick={() => navigate('/analytics')}
+                                  className="mt-3 w-full inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 sm:py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors shadow-xs font-display cursor-pointer"
+                                >
+                                  <BarChart2 className="w-3.5 h-3.5" />
+                                  <span>View Full Analytics</span>
+                                  <ArrowRight className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            );
+                          }
+
+                          if (parsedResult && parsedResult.action === 'QUESTIONS_TO_REVIEW_RETRIEVED') {
+                            return (
+                              <div
+                                key={tcIdx}
+                                className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs w-full max-w-md animate-in fade-in duration-300"
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 font-display flex items-center gap-1">
+                                    <BookOpen className="w-3 h-3 text-amber-600" />
+                                    Questions to Review
+                                  </span>
+                                  <span className="text-[11px] font-semibold text-slate-500">
+                                    {parsedResult.total_missed} items flagged
+                                  </span>
+                                </div>
+                                <h4 className="text-xs sm:text-sm font-display font-bold text-slate-900">
+                                  Diagnostic Telemetry Loaded
+                                </h4>
+                                <p className="text-xs text-slate-600 mt-0.5">
+                                  Targeted telemetry from your past assessments loaded for interactive Socratic remediation.
+                                </p>
+                                <button
+                                  onClick={() => navigate('/analytics')}
+                                  className="mt-3 w-full inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 sm:py-2 text-xs font-semibold text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl transition-colors shadow-2xs font-display cursor-pointer"
+                                >
+                                  <BookOpen className="w-3.5 h-3.5 text-slate-700" />
+                                  <span>Open in Analytics Page</span>
+                                  <ArrowRight className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            );
+                          }
+
+                          if (parsedResult && (parsedResult.action === 'ERROR' || parsedResult.error)) {
+                            return (
+                              <div
+                                key={tcIdx}
+                                className="bg-rose-50/80 border border-rose-200 p-3 sm:p-3.5 rounded-xl w-full max-w-md animate-in fade-in duration-200 text-xs text-rose-900 space-y-1.5 shadow-xs"
+                              >
+                                <div className="flex items-center gap-2 font-display font-semibold text-rose-800">
+                                  <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+                                  <span>Learning Assistant Notice</span>
+                                </div>
+                                <p className="text-rose-700 leading-relaxed font-sans text-xs">
+                                  {parsedResult.error || 'I encountered an issue preparing this practice quiz.'}
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setInput('generate a quiz to test my understanding on topic : ');
+                                    setTimeout(() => {
+                                      textareaRef.current?.focus();
+                                      adjustTextareaHeight();
+                                    }, 20);
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-rose-300 text-rose-700 hover:bg-rose-100/60 rounded-lg text-xs font-medium transition cursor-pointer shadow-xs"
+                                >
+                                  <span>Try Again</span>
+                                </button>
+                              </div>
+                            );
+                          }
+
+                          return null;
+                        })}
                     </div>
+                  </div>
+                );
+              })}
 
-                    {/* Render In-Chat Interactive Quiz Card if tool was executed */}
-                    {msg.tool_calls &&
-                      msg.tool_calls.map((tc, tcIdx) => {
-                        let parsedResult: any = null;
-                        try {
-                          parsedResult = typeof tc.result === 'string' ? JSON.parse(tc.result) : tc.result;
-                        } catch {}
-
-                        if (parsedResult && parsedResult.action === 'QUIZ_GENERATED') {
-                          return (
-                            <div
-                              key={tcIdx}
-                              className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs max-w-md animate-in fade-in duration-300"
-                            >
-                              <div className="flex items-center justify-between mb-1.5">
-                                <span className="text-[10px] font-bold text-slate-800 uppercase tracking-wider bg-white px-2 py-0.5 rounded-full border border-slate-200 font-display">
-                                  Quiz Ready
-                                </span>
-                                <span className="text-[11px] font-semibold text-slate-500 capitalize">
-                                  {parsedResult.difficulty} Difficulty
-                                </span>
-                              </div>
-                              <h4 className="text-xs sm:text-sm font-display font-bold text-slate-900">{parsedResult.topic}</h4>
-                              <p className="text-xs text-slate-600 mt-0.5">
-                                Assessment with {parsedResult.total_questions} questions and granular dwell time tracking.
-                              </p>
-                              <button
-                                onClick={() => navigate(`/quizzes/${parsedResult.quiz_id}`)}
-                                className="mt-2.5 w-full inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 sm:py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors shadow-xs font-display cursor-pointer"
-                              >
-                                <CheckSquare className="w-3.5 h-3.5" />
-                                <span>Start Quiz Now</span>
-                                <ArrowRight className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          );
-                        }
-
-                        if (parsedResult && (parsedResult.action === 'ERROR' || parsedResult.error)) {
-                          return (
-                            <div
-                              key={tcIdx}
-                              className="bg-rose-50/80 border border-rose-200 p-3 sm:p-3.5 rounded-xl max-w-md animate-in fade-in duration-200 text-xs text-rose-900 space-y-1.5 shadow-xs"
-                            >
-                              <div className="flex items-center gap-2 font-display font-semibold text-rose-800">
-                                <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
-                                <span>Learning Assistant Notice</span>
-                              </div>
-                              <p className="text-rose-700 leading-relaxed font-sans text-xs">
-                                {parsedResult.error || 'I encountered an issue preparing this practice quiz.'}
-                              </p>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setInput('generate a quiz to test my understanding on topic : ');
-                                  setTimeout(() => {
-                                    textareaRef.current?.focus();
-                                    adjustTextareaHeight();
-                                  }, 20);
-                                }}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-rose-300 text-rose-700 hover:bg-rose-100/60 rounded-lg text-xs font-medium transition cursor-pointer shadow-xs"
-                              >
-                                <span>Try Again</span>
-                              </button>
-                            </div>
-                          );
-                        }
-
-                        return null;
-                      })}
+              {/* Live In-Place Pedagogical Status Pill */}
+              {loading && (
+                <div className="w-full flex items-center justify-start py-1.5 animate-in fade-in duration-200">
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 shadow-2xs text-xs text-slate-700 font-sans">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-800 shrink-0" />
+                    <span className="font-medium">
+                      {agentSteps.length > 0
+                        ? agentSteps[agentSteps.length - 1].text
+                        : 'AI Instructor is thinking...'}
+                    </span>
                   </div>
                 </div>
-              );
-            })}
-
-            {/* Live In-Place Pedagogical Status Pill */}
-            {loading && (
-              <div className="w-full flex items-center justify-start py-1.5 animate-in fade-in duration-200">
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 shadow-2xs text-xs text-slate-700 font-sans">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-800 shrink-0" />
-                  <span className="font-medium">
-                    {agentSteps.length > 0
-                      ? agentSteps[agentSteps.length - 1].text
-                      : 'AI Instructor is thinking...'}
-                  </span>
-                </div>
-              </div>
-            )}
-            <div ref={chatBottomRef} />
+              )}
+              {/* Bottom spacing anchor to guarantee full clearance above prompt dock */}
+              <div className="h-8" />
+              <div ref={chatBottomRef} />
+            </div>
           </div>
 
           {/* Floating Prompt & Suggestions Dock - Pinned consistently regardless of scroll */}
-          <div className="absolute bottom-1.5 left-2 right-2 sm:bottom-3 sm:left-4 sm:right-4 max-w-4xl mx-auto pointer-events-none z-20 flex flex-col gap-1 sm:gap-1.5">
+          <div className="absolute bottom-2 left-0 right-0 max-w-3xl mx-auto px-3 sm:px-4 pointer-events-none z-20 flex flex-col gap-1.5 sm:gap-2">
             {/* Floating Suggestions Chips directly above prompt with no-scrollbar */}
             <div className={getSuggestionChipsContainerClass()}>
               {CHIP_SUGGESTIONS.map((chip, idx) => (

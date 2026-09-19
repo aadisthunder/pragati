@@ -37,11 +37,13 @@ Your core teaching philosophy is Socratic:
    - When the user sends a greeting (e.g., "hi", "hello", "hey") or casual message, warmly greet them back and ask what they would like to learn or practice today. DO NOT invoke any tools or bring up old quiz topics on greetings.
    - Do NOT fixate or loop on past tool operations unless the user's current message specifically asks about them.
 5. You have access to powerful tools (use them ONLY when actively requested by the user's current prompt):
-   - "generate_quiz": Call this whenever the user explicitly asks for a test, quiz, practice problems, or assessment on any topic.
-   - "get_student_attempts": Call this when the user asks to inspect their quiz history, past attempts, or scores.
-   - "get_attempt_telemetry": Call this to see which questions the student missed, skipped, or struggled with on a specific quiz attempt.
-   - "explain_missed_question": Call this to retrieve the exact question details to tutor the student on their mistakes.
-When a student asks you to review what they got wrong, first use get_student_attempts or get_attempt_telemetry to diagnose their weaknesses, then tutor them Socratically on the missed concepts.
+   - "generate_quiz": Call this whenever the user asks for a test, quiz, practice problems, or assessment on any topic (e.g. "Generate a quiz to test my understanding on topic : inflation 2026 10 questions").
+     CRITICAL QUIZ GENERATION RULE: After calling "generate_quiz", the interactive quiz card is automatically rendered in the student's user interface. Strictly DO NOT print out the questions, options, or answer keys in your chat text! Provide only a brief 1-2 sentence confirmation (e.g., "I have generated your practice assessment on inflation 2026. Click the card below to start!") and encourage them to take it.
+   - "get_student_performance": Call this whenever the user asks to review their performance, overall stats, scores, or skill rating (e.g. "Can you review my recent quiz attempts and performance?").
+   - "get_questions_to_review": Call this whenever the user asks to review their missed or skipped questions, struggled concepts, or mistakes (e.g. "Review the questions I missed or skipped in my recent quiz attempts and explain how to solve them step-by-step"). Connects directly to the Analytics Questions to Review dataset. Use the returned struggled questions and explanations to tutor the student Socratically on their exact mistakes.
+   - "get_student_attempts": Call this when the user asks for raw past quiz attempts list.
+   - "get_attempt_telemetry": Call this when the user asks for telemetry on a specific attempt.
+   - "explain_missed_question": Call this to retrieve question details for a specific question ID.
 6. Formatting & Visual Presentation:
    - When presenting available tools, key concepts, study topics, or structured steps, format each item as a bullet point with a bold title (e.g. "- **Title**: Description"). These render as individual visual outline cards in the student's interface.
    - Separate distinct ideas, sections, and topics with clean blank lines and markdown subheadings (###) to maintain generous vertical spacing and prevent dense walls of text.`;
@@ -217,6 +219,8 @@ export type AgentStepCallback = (step: { phase: string; text: string; tool?: str
 
 const FRIENDLY_TOOL_STATUS: Record<string, string> = {
   generate_quiz: 'Crafting your practice assessment...',
+  get_student_performance: 'Analyzing your academic performance and stats...',
+  get_questions_to_review: 'Retrieving your struggled and missed questions from Analytics...',
   get_student_attempts: 'Looking up your recent quiz performance...',
   get_attempt_telemetry: 'Reviewing the questions you found challenging...',
   explain_missed_question: 'Preparing Socratic tutoring guidance...',
@@ -246,20 +250,25 @@ export async function processAgentChat(
   }
   messages.push(new HumanMessage(userMessage));
 
-  // Run initial model call
+  // Run model with multi-step tool calling support (up to 3 iterations)
   let aiResponse = await llmWithTools.invoke(messages);
   const toolExecutions: any[] = [];
-  const detectedToolCalls = extractToolCalls(aiResponse);
+  const maxIterations = 3;
+  let iteration = 0;
 
-  // If the model generated tool calls, execute them dynamically and re-invoke
-  if (detectedToolCalls.length > 0) {
-    // Build a sanitized assistant message with clean, valid JSON tool_calls
+  while (iteration < maxIterations) {
+    iteration++;
+    const detectedToolCalls = extractToolCalls(aiResponse);
+    if (detectedToolCalls.length === 0) {
+      break;
+    }
+
     const cleanAIMessage = new AIMessage({
       content: typeof aiResponse.content === 'string' ? aiResponse.content : '',
       tool_calls: detectedToolCalls.map(tc => {
         const sanitized = sanitizeToolArgs(tc.name, tc.args, userMessage);
         return {
-          id: tc.id || `call_${tc.name}`,
+          id: tc.id || `call_${tc.name}_${iteration}`,
           name: tc.name,
           args: sanitized,
         };
@@ -267,6 +276,7 @@ export async function processAgentChat(
     });
     messages.push(cleanAIMessage);
     onStep?.({ phase: 'searching', text: 'Selecting the best learning approach...' });
+
     for (const toolCall of detectedToolCalls) {
       const sanitizedArgs = sanitizeToolArgs(toolCall.name, toolCall.args, userMessage);
       const selectedTool = toolMap.get(toolCall.name);
@@ -283,7 +293,7 @@ export async function processAgentChat(
           onStep?.({ phase: 'viewing_results', tool: toolCall.name, text: 'Finalizing concepts and questions...' });
           messages.push(
             new ToolMessage({
-              tool_call_id: toolCall.id || `call_${toolCall.name}`,
+              tool_call_id: toolCall.id || `call_${toolCall.name}_${iteration}`,
               name: toolCall.name,
               content: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult),
             })
@@ -297,7 +307,7 @@ export async function processAgentChat(
           });
           messages.push(
             new ToolMessage({
-              tool_call_id: toolCall.id || `call_${toolCall.name}`,
+              tool_call_id: toolCall.id || `call_${toolCall.name}_${iteration}`,
               name: toolCall.name,
               content: `Error executing ${toolCall.name}: ${err.message}`,
             })
@@ -307,7 +317,6 @@ export async function processAgentChat(
     }
 
     onStep?.({ phase: 'analyzing', text: 'Formulating step-by-step guidance...' });
-    // Final response incorporating dynamic tool outputs
     aiResponse = await llmWithTools.invoke(messages);
   }
 
@@ -317,30 +326,35 @@ export async function processAgentChat(
 
   let finalReply = rawContent.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
+  // If generate_quiz was executed, strictly prevent question spoilers in chat text
+  const quizGenExec = toolExecutions.find(t => t.name === 'generate_quiz');
+  if (quizGenExec) {
+    let topic = 'the requested topic';
+    try {
+      const resObj = typeof quizGenExec.result === 'string' ? JSON.parse(quizGenExec.result) : quizGenExec.result;
+      if (resObj?.topic) topic = resObj.topic;
+    } catch {}
+
+    if (
+      !finalReply ||
+      /Question\s*\d+/i.test(finalReply) ||
+      /###\s*Questions/i.test(finalReply) ||
+      /\bA\)\s+/i.test(finalReply) ||
+      /\b1\.\s+\*\*Which/i.test(finalReply) ||
+      /\b1\.\s+\*\*What/i.test(finalReply)
+    ) {
+      finalReply = `I have generated your practice quiz on **${topic}**. You can start taking it using the interactive card below!`;
+    }
+  }
+
   if (!finalReply) {
     if (toolExecutions.length > 0) {
-      const firstGen = toolExecutions.find(t => t.name === 'generate_quiz');
-      if (firstGen) {
-        let topic = 'the requested topic';
-        let isSuccess = false;
-        let errorMsg = '';
-        try {
-          const resObj = typeof firstGen.result === 'string' ? JSON.parse(firstGen.result) : firstGen.result;
-          if (resObj?.action === 'QUIZ_GENERATED') {
-            isSuccess = true;
-            if (resObj.topic) topic = resObj.topic;
-          } else if (resObj?.error) {
-            errorMsg = resObj.error;
-          }
-        } catch {
-          errorMsg = String(firstGen.result || firstGen.error || 'Quiz generation failed.');
-        }
-
-        if (isSuccess) {
-          finalReply = `I have generated a practice quiz on "${topic}". You can start taking it using the card below!`;
-        } else {
-          finalReply = `I encountered an issue generating the quiz on "${firstGen.args?.topic || 'the requested topic'}": ${errorMsg || 'Could not generate valid questions'}. Would you like me to try again or focus on a specific subtopic?`;
-        }
+      const perfExec = toolExecutions.find(t => t.name === 'get_student_performance');
+      const missedExec = toolExecutions.find(t => t.name === 'get_questions_to_review');
+      if (perfExec) {
+        finalReply = 'Here is your current academic performance report. You can review your complete analytics and learning curves below.';
+      } else if (missedExec) {
+        finalReply = 'Here are your recent struggled and missed questions from the Questions to Review section. Let us tutor through each concept step-by-step!';
       } else {
         finalReply = `I analyzed the academic tools and data for your request. Let me know how you would like to proceed!`;
       }

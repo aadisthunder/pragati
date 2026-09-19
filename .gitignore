@@ -83,3 +83,10 @@ quality-assurance/
 server/scripts/
 rules.md
 GEMINI.md
+
+# Playwright MCP artifacts & test screenshots
+.playwright-mcp/
+test_*.png
+test_*.jpg
+*.playwright.png
+
