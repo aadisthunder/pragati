@@ -85,6 +85,7 @@ export function extractQuizJson(rawContent: string): any {
  */
 export function sanitizeToolArgs(toolName: string, rawArgs: any = {}, userMessage: string = ''): any {
   const args = { ...(rawArgs || {}) };
+  const MAX_TOPIC_LENGTH = 120;
 
   if (toolName === 'generate_quiz') {
     if (!args.topic || typeof args.topic !== 'string' || !args.topic.trim()) {
@@ -96,8 +97,15 @@ export function sanitizeToolArgs(toolName: string, rawArgs: any = {}, userMessag
       if (topicMatch && topicMatch[1]) {
         args.topic = topicMatch[1].trim();
       } else {
-        args.topic = userMessage.trim();
+        // Fallback: derive a short topic from the user's message instead of interpolating
+        // the entire (possibly 5000-char) message into the quiz generation prompt.
+        args.topic = userMessage.trim().slice(0, MAX_TOPIC_LENGTH);
       }
+    }
+
+    // Hard-cap the topic regardless of source (LLM-provided or regex-derived)
+    if (typeof args.topic === 'string') {
+      args.topic = args.topic.trim().slice(0, MAX_TOPIC_LENGTH);
     }
 
     if (!args.num_questions || typeof args.num_questions !== 'number') {
@@ -127,10 +135,11 @@ export function createAgentTools(supabaseClient: SupabaseClient, userId: string,
       try {
         const selectedDifficulty = difficulty || 'intermediate';
         const count = num_questions || 5;
-        const prompt = `You are a curriculum expert. Generate a structured ${selectedDifficulty} level multiple-choice quiz on the topic "${topic}" with exactly ${count} questions.
+        const safeTopic = String(topic).slice(0, 120);
+        const prompt = `You are a curriculum expert. Generate a structured ${selectedDifficulty} level multiple-choice quiz on the topic "${safeTopic}" with exactly ${count} questions.
 Return ONLY a valid JSON object matching this exact structure, with no markdown code fences or backticks:
 {
-  "topic": "${topic}",
+  "topic": "${safeTopic}",
   "difficulty": "${selectedDifficulty}",
   "questions": [
     {
@@ -327,6 +336,12 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
           .eq('id', userId)
           .maybeSingle();
 
+        // True all-time attempt count (independent of the recent-attempts page limit)
+        const { count: totalAttempts, error: countError } = await supabaseClient
+          .from('quiz_attempts')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', userId);
+
         const { data: attempts, error } = await supabaseClient
           .from('quiz_attempts')
           .select('id, quiz_id, score, total_questions, accuracy_pct, total_time_sec, completed_at, quizzes(topic, difficulty)')
@@ -342,13 +357,15 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
         }
 
         const attemptsList = attempts || [];
+        const trueTotalAttempts = typeof totalAttempts === 'number' ? totalAttempts : attemptsList.length;
         if (attemptsList.length === 0) {
           return JSON.stringify({
             action: 'PERFORMANCE_RETRIEVED',
             has_attempts: false,
             skill_rating: profile?.skill_rating || 1200,
             overall_accuracy: 0,
-            total_attempts: 0,
+            total_attempts: trueTotalAttempts,
+            recent_attempts_count: 0,
             recent_attempts: [],
             message: 'You have not completed any quizzes yet. Take your first quiz in the Quizzes Arena to build your performance profile!',
           });
@@ -368,7 +385,9 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
           has_attempts: true,
           skill_rating: profile?.skill_rating || 1200,
           overall_accuracy: overallAccuracy,
-          total_attempts: attemptsList.length,
+          // total_attempts is the ALL-TIME count; recent_attempts only covers the last `limit` attempts.
+          total_attempts: trueTotalAttempts,
+          recent_attempts_count: attemptsList.length,
           recent_attempts: attemptsList.map((a: any) => ({
             id: a.id,
             topic: (a.quizzes as any)?.topic || 'General',

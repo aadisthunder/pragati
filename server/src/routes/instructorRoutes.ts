@@ -94,7 +94,9 @@ instructorRouter.post(
         .select('id, title')
         .single();
       session = newSession;
-      await pruneOldSessions(scopedClient, userId, 5);
+      // NOTE: old sessions are intentionally NOT auto-deleted. Silent destructive pruning
+      // surprised users by permanently removing conversation history (see GET /sessions,
+      // which simply lists the latest 5 without deleting anything).
     } else if (session.title === 'New Conversation') {
       await scopedClient
         .from('chat_sessions')
@@ -152,50 +154,9 @@ instructorRouter.post(
 );
 
 /**
- * Prunes chat sessions for a user so only the latest `maxSessions` (default 5) are kept.
- * Oldest sessions and their associated chat messages are completely removed from the database.
+ * Lists recent chat sessions for a user (latest 5). Sessions are NEVER auto-deleted here —
+ * pruning conversations silently destroyed user data; users delete sessions explicitly instead.
  */
-export async function pruneOldSessions(
-  scopedClient: any,
-  userId: string,
-  maxSessions = 5
-): Promise<string[]> {
-  try {
-    const { data: allSessions, error } = await scopedClient
-      .from('chat_sessions')
-      .select('id, created_at')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-
-    if (error || !allSessions || allSessions.length <= maxSessions) {
-      return [];
-    }
-
-    const excessSessions = allSessions.slice(maxSessions);
-    const excessIds = excessSessions.map((s: any) => s.id);
-
-    if (excessIds.length > 0) {
-      // 1. Delete associated messages first
-      await scopedClient
-        .from('chat_messages')
-        .delete()
-        .in('session_id', excessIds)
-        .eq('user_id', userId);
-
-      // 2. Delete excess sessions from database
-      await scopedClient
-        .from('chat_sessions')
-        .delete()
-        .in('id', excessIds)
-        .eq('user_id', userId);
-    }
-
-    return excessIds;
-  } catch (err) {
-    console.error('Failed to prune old chat sessions:', err);
-    return [];
-  }
-}
 
 // GET /api/instructor/sessions - List recent chat sessions for user (max 5)
 instructorRouter.get('/sessions', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -203,9 +164,6 @@ instructorRouter.get('/sessions', async (req: AuthenticatedRequest, res: Respons
   const userId = req.user!.id;
 
   try {
-    // Prune any sessions beyond 5 from the database
-    await pruneOldSessions(scopedClient, userId, 5);
-
     const { data: sessions, error } = await scopedClient
       .from('chat_sessions')
       .select('id, title, created_at')
@@ -234,9 +192,6 @@ instructorRouter.post('/sessions', async (req: AuthenticatedRequest, res: Respon
       .single();
 
     if (error) throw error;
-
-    // Prune so only the latest 5 sessions exist in DB
-    await pruneOldSessions(scopedClient, userId, 5);
 
     res.status(201).json({ session: newSession });
   } catch (err: any) {

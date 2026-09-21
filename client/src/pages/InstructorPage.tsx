@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
+import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
 import { apiRequestCached, apiStreamRequest, getFromCache, invalidateCache } from '../api/client';
 import { TypewriterMessage } from '../components/chat/TypewriterMessage';
@@ -16,6 +17,7 @@ import {
   handleModalBackdropClick,
 } from '../utils/theme';
 import { compressImageFile } from '../utils/imageCompressor';
+import { normalizeLatexDelimiters } from '../utils/latex';
 import { useTypewriterPlaceholder } from '../hooks/useTypewriterPlaceholder';
 import {
   Send,
@@ -168,9 +170,30 @@ export const InstructorPage: React.FC = () => {
     }
   }, [searchParams, setSearchParams, adjustTextareaHeight]);
 
+  // Scroll policy: align the viewport ONCE per exchange so the composer, the user's message,
+  // and the start of the AI reply are all in view. While the AI types, the reply start stays
+  // anchored (no bottom-chasing) — the reader scrolls down manually for the rest.
   useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
+    if (loading) {
+      chatBottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [loading]);
+
+  // When a STORED conversation finishes loading, jump once to the latest exchange.
+  // The pending marker is consumed on first sight of that session's messages, and is cleared
+  // in the send path for brand-new sessions so a freshly completed reply is NOT jumped past.
+  const pendingSessionScrollRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    pendingSessionScrollRef.current = sessionId ?? null;
+  }, [sessionId]);
+  useEffect(() => {
+    const pending = pendingSessionScrollRef.current;
+    if (pending === undefined) return; // no pending alignment (e.g. new session created by a send)
+    if (pending !== (sessionId ?? null)) return; // stale marker
+    if (loading || messages.length === 0) return; // wait for real content
+    pendingSessionScrollRef.current = undefined;
+    chatBottomRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
+  }, [sessionId, messages, loading]);
 
   // Close upload sheet on Escape key press with smooth slide-down
   useEffect(() => {
@@ -260,6 +283,9 @@ export const InstructorPage: React.FC = () => {
       window.dispatchEvent(new Event('chat_sessions_updated'));
 
       if (data?.sessionId && (!sessionId || sessionId === 'new')) {
+        // Brand-new session created by this send: skip the stored-conversation bottom jump so
+        // the just-completed reply stays top-anchored next to the composer for reading.
+        pendingSessionScrollRef.current = undefined;
         setSearchParams({ session: data.sessionId });
       }
 
@@ -479,8 +505,8 @@ export const InstructorPage: React.FC = () => {
 
                         {isUser ? (
                           <div className="prose prose-sm max-w-none text-white prose-p:my-1">
-                            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-                              {msg.content}
+                            <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
+                              {normalizeLatexDelimiters(msg.content)}
                             </ReactMarkdown>
                           </div>
                         ) : (
@@ -488,7 +514,6 @@ export const InstructorPage: React.FC = () => {
                             content={msg.content}
                             animate={msg.animate}
                             speedMs={12}
-                            onUpdate={() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' })}
                           />
                         )}
                       </div>

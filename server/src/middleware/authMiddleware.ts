@@ -10,11 +10,14 @@ export interface AuthenticatedRequest extends Request {
   token?: string;
 }
 
+// Typed as a standard RequestHandler (Request param, not AuthenticatedRequest) so it is
+// assignable in app.use(...) without `as any` casts; the authenticated request is narrowed below.
 export const authMiddleware = async (
-  req: AuthenticatedRequest,
+  req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
+  const authReq = req as AuthenticatedRequest;
   const authHeader = req.headers.authorization;
 
   if (!authHeader) {
@@ -37,8 +40,8 @@ export const authMiddleware = async (
       return;
     }
 
-    req.user = user;
-    req.token = token;
+    authReq.user = user;
+    authReq.token = token;
     next();
   } catch (err) {
     res.status(401).json({ error: 'Authentication failed' });

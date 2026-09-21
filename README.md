@@ -7,6 +7,7 @@
 ### Intelligent Socratic AI Learning Companion & Telemetry-Driven Assessment Arena
 
 [![Live Demo](https://img.shields.io/badge/Live_Demo-pragati--aadi.web.app-7C3AED?style=for-the-badge&logo=firebase&logoColor=white)](https://pragati-aadi.web.app)
+[![GitHub](https://img.shields.io/badge/GitHub-aadisthunder%2Fpragati-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/aadisthunder/pragati)
 
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
@@ -80,22 +81,27 @@ The defining feature of Pragati is its self-reinforcing mastery cycle that trans
 
 ### 2. Socratic AI Instructor & Multimodal Capture
 - **First-Principles Dialogue**: Guides students with targeted questions, scaffolding, and hints rather than dumping direct solutions.
-- **Sub-Second Streaming**: Powered by Groq LPU hardware with Time-to-First-Token (TTFT) under 300ms.
-- **Pristine KaTeX Math Rendering**: Flawless inline ($E = mc^2$) and block ($$\int_a^b f(x)\,dx$$) scientific typesetting.
-- **Dynamic Tool Calling**: Uses LangChain tools to inspect quiz history, diagnose missed questions, and generate assessments on the fly.
-- **Multimodal Problem Snapshot Capture**: Slide-up camera and photo gallery sheet allowing students to capture physical textbook problems, handwritten equations, or diagrams, with LaTeX OCR via Groq multimodal vision (`qwen/qwen3.6-27b`).
-- **Single-Line Responsive Quick Chips**: Fast one-click prompt pills (*Ask a doubt*, *Request a quiz topic*, *Review performance*, *Review missed questions*) displayed in a clean single line on desktop and swipeable on mobile.
+- **Sub-Second Streaming**: Powered by Groq LPU hardware with Server-Sent Events (SSE) streaming and live agent status pills ("Analyzing performance...", "Crafting your assessment...") that surface each tool call in real time.
+- **Flawless KaTeX Math Rendering**: Inline ($E = mc^2$) and block ($$\int_a^b f(x)\,dx$$) scientific typesetting. A dual-layer LaTeX normalizer (server + client) rewrites every delimiter style the model might emit (`$...$`, `$$...$$`, `\(...\)`, `\[...\]`) into perfectly rendered math — stored conversation history included.
+- **Dynamic Tool Calling**: Uses LangChain tools to inspect quiz history, diagnose missed questions, generate assessments, and pull performance telemetry on the fly — with multi-step tool loops and robust JSON repair for partial model outputs.
+- **Multimodal Problem Snapshot Capture**: Slide-up camera and photo gallery sheet letting students capture physical textbook problems, handwritten equations, or diagrams. Images are client-side compressed (~15 MB photos down to ~350 KB) and read by Groq multimodal vision (`qwen/qwen3.8-27b`) for LaTeX OCR.
+- **Interruptible Generation**: A one-click stop button aborts any in-flight AI response mid-stream.
+- **Quick Prompt Chips**: Fast one-click prompt pills (*Ask a doubt*, *Request a quiz topic*, *Review performance*, *Review missed questions*) in a clean single line on desktop, swipeable on mobile.
+- **Session Management**: Named chat sessions in a sidebar with deletion confirmation modals, instant cache-backed reload, and automatic first-message titling.
 
 ### 3. Interactive Quiz Arena
-- **Dynamic Curriculum Generation**: AI crafts custom 3-to-10 question quizzes on any STEM topic with 4 choices, hints, and explanations.
-- **Dual Telemetry Monospace HUD**: Real-time timer tracking per-question dwell time alongside overall exam countdown.
-- **Immediate Socratic Remediation**: One-click transition from any missed question directly into a 1-on-1 tutoring session with the AI Instructor.
+- **Dynamic Curriculum Generation**: AI crafts custom quizzes on any STEM topic with 4 choices, hints, and step-by-step explanations. Question count adapts to the request (e.g., "10 questions on AC circuits, advanced").
+- **Answer-Key Protection**: The question-fetching API strips `correct_answer` and `explanation` before delivery to the browser, and a post-generation guard prevents the model from spoiling answers in chat.
+- **Smart Quiz Palette**: Navigation grid showing attempted / unattempted / unvisited states with submit-time unanswered warnings.
+- **Flexible Timing HUD**: Per-question dwell time tracked invisibly for telemetry, plus a generous overall countdown.
+- **Immediate Socratic Remediation**: One-click transition from any quiz question directly into a tutoring session with the AI Instructor.
+- **Share Quizzes**: Native Web Share API integration with clipboard fallback.
 
 ### 4. Telemetry-Driven Student Analytics
-- **"Questions to Review" Hub**: Centralized review arena that lists all incorrect/skipped questions with one-click AI tutoring sessions.
-- **Cognitive Metrics**: Dwell-time distribution, hint consumption velocity, and accuracy progression curves.
-- **Topic Mastery Breakdown**: Visual progress bars categorizing student proficiency into Beginner, Intermediate, and Advanced tiers.
-- **Adaptive Elo Rating**: Skill rating recalculation engine reflecting conceptual growth over time.
+- **"Questions to Review" Hub**: Centralized review arena listing all incorrect/skipped questions with one-click AI tutoring sessions and bulk/single dismissal.
+- **Cognitive Metrics**: Overall accuracy, average dwell time, total practice time, and accuracy progression curves (Recharts).
+- **Topic Mastery Breakdown**: Per-topic accuracy bars across Beginner / Intermediate / Advanced difficulty tiers.
+- **Adaptive Elo Rating**: Skill rating recalculated after every attempt (difficulty-weighted, floored at 800) with delta badges on the dashboard.
 
 ---
 
@@ -108,12 +114,12 @@ graph TD
     subgraph Client ["Frontend (React 18 + Vite)"]
         UI["Glassmorphism UI"]
         AuthCtx["AuthContext (JWT Session)"]
-        ApiClient["API Client (Auto-Refresh JWT)"]
+        ApiClient["API Client (Auto-Refresh JWT, SWR Cache, Dedup)"]
     end
 
     subgraph Backend ["Backend (Node.js Express + LangChain)"]
         AuthMW["Auth Middleware (JWT Verify)"]
-        RateLimit["Multi-Tier Rate Limiter"]
+        RateLimit["Multi-Tier Rate Limiter (per-user)"]
         Router["Express API Routes (/api/*)"]
         Agent["LangChain Agent & Tools"]
         Vision["Groq Multimodal Vision Service"]
@@ -142,24 +148,25 @@ graph TD
 
 ## AI Engine & Capabilities
 
-| Capability | Model | Provider / Hardware | Latency / Specs |
+| Capability | Model | Provider / Hardware | Notes |
 | :--- | :--- | :--- | :--- |
-| **Socratic Reasoning & Tools** | `openai/gpt-oss-120b` | Groq LPU | ~250–350 tokens/sec, TTFT < 300ms |
-| **Multimodal Problem Vision** | `qwen/qwen3.6-27b` | Groq LPU | ~800ms OCR extraction, LaTeX output |
-| **Fast Fallback Engine** | `openai/gpt-oss-20b` | Groq LPU | ~500–800 tokens/sec |
-| **Audio Transcription** | `whisper-large-v3-turbo` | Groq LPU | Near-instant voice transcription |
+| **Socratic Reasoning & Tools** | `openai/gpt-oss-120b` | Groq LPU | Tool-calling agent loop, SSE streaming |
+| **Multimodal Problem Vision** | `qwen/qwen3.8-27b` | Groq LPU | LaTeX OCR extraction, one automatic retry |
+
+*Model IDs are configurable via `GROQ_MODEL` / `GROQ_VISION_MODEL` environment variables.*
 
 ---
 
 ## Design System
 
-Pragati features a **Minimalist Glassmorphism** visual language:
-- **Palette**: Pristine white and subtle translucent panels (`backdrop-blur-md`, `border-slate-200/90`).
-- **Typography**: 
+Pragati features a **Minimalist Monochrome** visual language:
+- **Palette**: Pristine white and slate tones with subtle translucent panels (`backdrop-blur`, `border-slate-200`).
+- **Typography**:
   - **Headings**: Plus Jakarta Sans (bold, modern, tracking-tight).
   - **Body**: Inter (high-legibility reading experience).
   - **Numbers / Telemetry**: JetBrains Mono (precision exam countdown & timer).
 - **Strict Iconography**: 100% **Lucide React** vector icons. **Zero emojis** anywhere in UI copy, buttons, badges, or headers.
+- **KaTeX Typesetting**: Publication-quality math fonts loaded globally.
 - **Fixed Navigation**: Minimalist 3-item sidebar:
   1. `AI Instructor` (Interactive tutoring)
   2. `Quizzes` (Assessment arena)
@@ -169,15 +176,19 @@ Pragati features a **Minimalist Glassmorphism** visual language:
 
 ## Security & Production Hardening
 
-- **User Data Isolation**: Every database interaction filters by the authenticated `user_id` and utilizes Supabase Row-Level Security (RLS).
-- **Multi-Tier Rate Limiting**:
+- **User Data Isolation**: Every database interaction runs through Supabase Row-Level Security (RLS) policies scoped to `auth.uid()` — 20+ owner-only policies across 7 tables, with a dedicated read-only policy set that neuters the public demo account.
+- **Multi-Tier Per-User Rate Limiting** (authenticated middleware runs *before* limiters, so limits key on `user_id` with IP fallback):
   - Global API limiter: `120 req/min`
   - AI Chat endpoint: `20 req/min` (safeguards Groq free-tier quotas)
   - Vision OCR upload: `8 req/min`
   - Quiz & Analytics endpoints: `80 req/min`
-- **Payload Boundaries**: 100 KB global limit to prevent memory-exhaustion DoS; 5 MB limit restricted strictly to image uploads on `/api/instructor/chat`.
-- **Security Headers**: `helmet()` enabled with secure content policies.
-- **Zero Key Leakage**: Sensitive credentials (`GROQ_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) reside solely on the backend. Only the public anon key is delivered to the browser.
+- **Payload Boundaries**: 6 MB global JSON cap (sized above the 5 MB image-upload parser so vision uploads never hit a premature 413), preventing memory-exhaustion DoS.
+- **Answer-Key Protection**: Correct answers and explanations are stripped server-side from question payloads delivered to the browser.
+- **Security Headers**: `helmet()` enabled; strict CORS allowlist (localhost + configured production origins + Vercel previews).
+- **Input Validation**: Zod schemas on every agent tool; chat history sanitizer caps turns and strips client-controlled fields; message size capped at 5,000 chars.
+- **Automatic Profile Provisioning**: A `SECURITY DEFINER` trigger creates a `user_profiles` row for every new auth user, so Elo ratings persist correctly from the first attempt (includes a backfill for pre-existing users).
+- **Zero Key Leakage**: Sensitive credentials (`GROQ_API_KEY`, Supabase keys) reside solely on the backend. Only the public anon key is delivered to the browser.
+- **Graceful Degradation**: Quiz submission persists the attempt even if telemetry or rating updates fail, surfacing warnings instead of triggering duplicate submissions.
 
 ---
 
@@ -193,7 +204,7 @@ Pragati features a **Minimalist Glassmorphism** visual language:
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/your-username/pragati.git
+   git clone https://github.com/aadisthunder/pragati.git
    cd pragati
    ```
 
@@ -218,7 +229,11 @@ Pragati features a **Minimalist Glassmorphism** visual language:
    ```env
    VITE_SUPABASE_URL=https://<your-project>.supabase.co
    VITE_SUPABASE_ANON_KEY=<your-supabase-anon-key>
+   VITE_API_URL=   # leave empty in local dev (Vite proxies /api to localhost:5000)
    ```
+
+4. **Set up the database schema**:
+   Run the SQL in [`supabase/schema.sql`](supabase/schema.sql) in your Supabase project's SQL editor (tables, RLS policies, and the profile-creation trigger).
 
 ### Local Development
 
@@ -240,20 +255,22 @@ Pragati features a **Minimalist Glassmorphism** visual language:
 
 ### Testing
 
-Pragati maintains comprehensive automated test coverage across both frontend and backend using **Vitest**:
+Both frontend and backend use **Vitest**. The suites cover the pure-logic layer where regressions hurt most — LaTeX/math rendering, quiz navigation state, theming utilities, agent tool-argument sanitization, quiz JSON repair, and server boot:
 
 ```bash
-# Run server test suite (Agent, Security, Rate Limiter, Vision OCR, Sanitizer)
+# Run server tests (LaTeX normalizer, agent tool sanitizers, quiz JSON repair, server bootstrap)
 cd server && npm test
 
-# Run client test suite (Input Handlers, Image Compressor, Responsive Dock)
+# Run client tests (LaTeX normalizer, markdown card styling, quiz navigation, theme tokens)
 cd client && npm test
+
+# Or everything from the root
+npm test
 ```
 
 To verify production builds:
 ```bash
-cd server && npm run build
-cd client && npm run build
+npm run build
 ```
 
 ---
@@ -286,7 +303,7 @@ cd client && npm run build
 4. Configure Environment Variables:
    - `VITE_SUPABASE_URL`: `https://<your-project>.supabase.co`
    - `VITE_SUPABASE_ANON_KEY`: `<your-supabase-anon-key>`
-   - `VITE_API_URL`: `https://<your-project>.supabase.co/functions/v1/api`
+   - `VITE_API_URL`: `https://<your-backend-host>`
 5. Deploy.
 
 #### Backend (Render or Railway)
@@ -300,7 +317,7 @@ cd client && npm run build
    - `SUPABASE_URL`: `https://<your-project>.supabase.co`
    - `SUPABASE_ANON_KEY`: `<your-supabase-anon-key>`
    - `GROQ_API_KEY`: `<your-groq-api-key>`
-   - `CLIENT_URL`: `https://pragati-aadi.web.app`
+   - `CLIENT_URL` / `CORS_ORIGIN`: `https://pragati-aadi.web.app`
 
 ### Supabase URL Configuration
 In your Supabase project dashboard under **Authentication -> URL Configuration**:
@@ -313,8 +330,10 @@ In your Supabase project dashboard under **Authentication -> URL Configuration**
 
 For hackathon judges and evaluators, Pragati includes a **One-Click Demo Access** feature:
 - Navigate to the `/login` page.
-- Click **"Instant Judge Login"** (or use `judge.pragati@gmail.com`).
-- You will be authenticated immediately with pre-loaded telemetry data and quiz history.
+- Click **"Instant Judge Login"**.
+- You will be authenticated immediately with pre-loaded telemetry data, quiz history, and analytics.
+
+The demo account is **read-only by database policy** (RLS blocks it from inserting or deleting any data), so exploring it can never pollute real student data.
 
 ---
 
