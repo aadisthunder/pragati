@@ -14,6 +14,8 @@ import {
   getUploadButtonClass,
   getSuggestionChipsContainerClass,
   getHeroSuggestionChipsContainerClass,
+  getChatMessageTextClass,
+  getComposerTextareaClass,
   handleModalBackdropClick,
 } from '../utils/theme';
 import { compressImageFile } from '../utils/imageCompressor';
@@ -426,7 +428,7 @@ export const InstructorPage: React.FC = () => {
               onKeyDown={handleKeyDown}
               placeholder={animatedPlaceholder}
               disabled={loading}
-              className="flex-1 px-2 sm:px-3 py-1 bg-white text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none resize-none transition disabled:bg-transparent disabled:text-slate-500 leading-normal max-h-32 sm:max-h-48 subtle-scroll"
+              className={getComposerTextareaClass()}
             />
 
             <button
@@ -477,7 +479,7 @@ export const InstructorPage: React.FC = () => {
                   >
                     <div className={`${isUser ? 'max-w-[85%] sm:max-w-xl' : 'w-full'} flex flex-col ${isUser ? 'items-end' : 'items-start'} space-y-2`}>
                       <div
-                        className={`text-xs sm:text-[13.5px] leading-normal sm:leading-relaxed ${
+                className={`${getChatMessageTextClass()} ${
                           isUser
                             ? 'px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl sm:rounded-2xl bg-slate-900 text-white rounded-tr-none shadow-xs'
                             : 'w-full px-4 py-3 sm:px-5 sm:py-3.5 rounded-xl sm:rounded-2xl bg-white text-slate-900 border border-slate-200/80 shadow-xs'
@@ -679,14 +681,15 @@ export const InstructorPage: React.FC = () => {
                   </div>
                 </div>
               )}
-              {/* Bottom spacing anchor to guarantee full clearance above prompt dock */}
-              <div className="h-8" />
+              {/* Bottom spacing anchor to guarantee full clearance above the floating
+                  prompt dock (chips + input). Taller on mobile where chips wrap. */}
+              <div className="h-36 sm:h-28" />
               <div ref={chatBottomRef} />
             </div>
           </div>
 
           {/* Floating Prompt & Suggestions Dock - Pinned consistently regardless of scroll */}
-          <div className="absolute bottom-2 left-0 right-0 max-w-3xl mx-auto px-3 sm:px-4 pointer-events-none z-20 flex flex-col gap-1.5 sm:gap-2">
+          <div className="absolute bottom-2 sm:bottom-3 left-0 right-0 max-w-3xl mx-auto px-3 sm:px-4 pointer-events-none z-20 flex flex-col gap-1.5 sm:gap-2">
             {/* Floating Suggestions Chips directly above prompt with no-scrollbar */}
             <div className={getSuggestionChipsContainerClass()}>
               {CHIP_SUGGESTIONS.map((chip, idx) => (
@@ -778,7 +781,7 @@ export const InstructorPage: React.FC = () => {
                 onKeyDown={handleKeyDown}
                 placeholder={loading ? "AI Instructor is thinking..." : animatedPlaceholder}
                 disabled={loading}
-                className="flex-1 px-2 sm:px-3 py-1 bg-white text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none resize-none transition disabled:bg-transparent disabled:text-slate-500 leading-normal max-h-32 sm:max-h-48 subtle-scroll"
+                className={getComposerTextareaClass()}
               />
 
               {/* Dynamic Action Button: Interrupt Button when running, Send Button when idle */}
@@ -798,9 +801,9 @@ export const InstructorPage: React.FC = () => {
                   disabled={(!input.trim() && !attachedImage) || loading}
                   title="Send Message"
                   aria-label="Send Message"
-                  className="w-9 h-9 sm:w-10 sm:h-10 flex-shrink-0 flex items-center justify-center rounded-xl bg-slate-900 hover:bg-slate-800 text-white shadow-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98] cursor-pointer"
+                  className="w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-xl bg-slate-900 hover:bg-slate-800 text-white shadow-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98] cursor-pointer"
                 >
-                  <Send className="w-4 h-4" />
+                  <Send className="w-[18px] h-[18px]" />
                 </button>
               )}
             </form>
