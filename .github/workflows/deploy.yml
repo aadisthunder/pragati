@@ -1,0 +1,91 @@
+# Build + Deploy Pragati on every push to main.
+#
+# One-time setup (GitHub repo -> Settings -> Secrets and variables -> Actions):
+#   FIREBASE_SERVICE_ACCOUNT : Full JSON from Firebase Console -> Project settings ->
+#                              Service accounts -> "Generate new private key".
+#   SUPABASE_ACCESS_TOKEN    : Personal token from supabase.com/dashboard/account/tokens.
+#   VITE_SUPABASE_URL        : https://<your-project>.supabase.co
+#   VITE_SUPABASE_ANON_KEY   : The public anon key from Supabase -> Project Settings -> API.
+#
+# The client/.env.production file is gitignored, so CI writes it from the secrets above.
+
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Run client tests
+        working-directory: client
+        run: npm test
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Run server tests
+        working-directory: server
+        run: npm test
+
+  deploy:
+    name: Deploy (Firebase + Supabase)
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      # .env.production is gitignored, so create it here with the production API URL.
+      - name: Write client/.env.production
+        working-directory: client
+        run: |
+          {
+            echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}"
+            echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}"
+            echo "VITE_API_URL=${{ secrets.VITE_SUPABASE_URL }}/functions/v1/api"
+          } > .env.production
+
+      - name: Build client
+        working-directory: client
+        run: npm run build
+
+      - name: Deploy frontend to Firebase Hosting
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          echo "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/firebase-sa.json"
+          GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebase-sa.json" \
+            npx --yes firebase-tools@15 deploy --only hosting --project pragati-aadi --non-interactive
+          rm -f "$RUNNER_TEMP/firebase-sa.json"
+
+      - name: Deploy API to Supabase Edge Function
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: npx --yes supabase functions deploy api --project-ref rraemkgnxfrcdjfvpiml --no-verify-jwt
