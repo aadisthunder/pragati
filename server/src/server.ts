@@ -22,7 +22,9 @@ import { quizRouter } from './routes/quizRoutes.js';
 import { analyticsRouter } from './routes/analyticsRoutes.js';
 
 const app = express();
-const port = process.env.PORT || 5000;
+// Number("0") is 0 (falsy) so a PORT env of "0" or "" safely falls back to 5000,
+// unlike `process.env.PORT || 5000` where the string "0" is truthy and binds an ephemeral port.
+const port = Number(process.env.PORT) || 5000;
 
 const allowedOrigins = [
   'http://localhost:5173',
@@ -60,8 +62,11 @@ app.use(
   })
 );
 
-// Global Small Payload Limit to prevent heap exhaustion DOS
-app.use(express.json({ limit: '100kb' }));
+// Global Small Payload Limit to prevent heap exhaustion DOS.
+// The /api/instructor/chat and /api/instructor/ocr routes mount their own 5MB parser AFTER
+// this global one runs, so the global limit must be >= the largest route payload or every
+// large image upload dies with a 413 'payload too large' before the route parser runs.
+app.use(express.json({ limit: '6mb' }));
 
 // Apply Global Rate Limiter to all /api/* routes
 app.use('/api', globalLimiter);
@@ -71,17 +76,25 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'pragati-server', time: new Date().toISOString() });
 });
 
-// Specific Sensitive Route Limiters
+// Authenticate first so the per-user rate limiters below can key on req.user.id.
+// (The limiters previously ran before auth, so req.user was always undefined and
+// every "per-user" limit silently degraded to per-IP — a classroom behind one NAT IP
+// would exhaust the shared chat limit together.)
+app.use('/api/auth', authMiddleware, authRouter);
+app.use('/api/instructor', authMiddleware);
+app.use('/api/quizzes', authMiddleware);
+app.use('/api/analytics', authMiddleware);
+
+// Sensitive Route Limiters (per authenticated user, IP fallback for safety)
 app.use('/api/instructor/chat', chatRateLimiter);
 app.use('/api/instructor/ocr', ocrRateLimiter);
 app.use('/api/quizzes', quizRateLimiter);
 app.use('/api/analytics', quizRateLimiter);
 
-// Authenticated API Routes
-app.use('/api/auth', authMiddleware as any, authRouter);
-app.use('/api/instructor', authMiddleware as any, instructorRouter);
-app.use('/api/quizzes', authMiddleware as any, quizRouter);
-app.use('/api/analytics', authMiddleware as any, analyticsRouter);
+// Routers
+app.use('/api/instructor', instructorRouter);
+app.use('/api/quizzes', quizRouter);
+app.use('/api/analytics', analyticsRouter);
 
 // 404 Handler for undefined API routes
 app.use('/api', (req, res) => {

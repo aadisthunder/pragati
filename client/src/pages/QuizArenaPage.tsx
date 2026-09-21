@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { apiRequest, invalidateCache } from '../api/client';
@@ -27,6 +28,7 @@ import {
   SUBMIT_MODAL_SUBTITLE,
   handleModalBackdropClick,
 } from '../utils/theme';
+import { normalizeLatexDelimiters } from '../utils/latex';
 import {
   toggleAnswer,
   canNavigatePrevious,
@@ -37,21 +39,12 @@ import {
 } from '../utils/quizNavigation';
 
 export function formatMathForMarkdown(text: string): string {
-  if (!text) return '';
-  const trimmed = text.trim();
-  // If text contains LaTeX math commands but is missing enclosing $ signs, wrap with $
-  if (/\\(frac|sqrt|cos|sin|tan|ln|log|sum|int|times|cdot|partial|pi|theta|alpha|beta|gamma)/.test(trimmed) && !trimmed.includes('$')) {
-    return `$${trimmed}$`;
-  }
-  return trimmed;
+  return normalizeLatexDelimiters(text);
 }
 
 export function sanitizePromptText(text: string): string {
   if (!text) return '';
-  let cleaned = text.trim();
-  // Remove accidental duplicate LaTeX formula patterns e.g. $f(x) = ...$f(x) = ...
-  cleaned = cleaned.replace(/\$(\s*f\(x\)\s*=\s*[^\$]+)\s*\$\s*f\(x\)\s*=\s*[^\?\n]+/i, '$$$1$$');
-  return formatMathForMarkdown(cleaned);
+  return normalizeLatexDelimiters(text.trim());
 }
 
 interface QuestionOption {
@@ -449,7 +442,7 @@ export const QuizArenaPage: React.FC = () => {
               </div>
 
               <div className="prose prose-sm max-w-none font-medium text-slate-900">
-                <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
                   {r.prompt}
                 </ReactMarkdown>
               </div>
@@ -458,7 +451,7 @@ export const QuizArenaPage: React.FC = () => {
                 <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
                   <span className="text-slate-400 block text-[10px] uppercase font-sans font-bold">Your Choice</span>
                   <div className="font-bold text-slate-800 font-sans mt-0.5">
-                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                    <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
                       {formatMathForMarkdown(r.selected_answer || 'None (Skipped)')}
                     </ReactMarkdown>
                   </div>
@@ -466,7 +459,7 @@ export const QuizArenaPage: React.FC = () => {
                 <div className="p-3 rounded-2xl bg-emerald-50/50 border border-emerald-200">
                   <span className="text-emerald-600 block text-[10px] uppercase font-sans font-bold">Correct Answer</span>
                   <div className="font-bold text-emerald-800 font-sans mt-0.5">
-                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                    <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
                       {formatMathForMarkdown(r.correct_answer)}
                     </ReactMarkdown>
                   </div>
@@ -476,7 +469,7 @@ export const QuizArenaPage: React.FC = () => {
               {r.explanation && (
                 <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-700 leading-relaxed">
                   <strong className="text-slate-900 font-display font-bold block mb-1">Explanation:</strong>
-                  <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                  <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
                     {formatMathForMarkdown(r.explanation)}
                   </ReactMarkdown>
                 </div>
@@ -547,7 +540,7 @@ export const QuizArenaPage: React.FC = () => {
                 <div className="space-y-3 sm:space-y-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="prose prose-base max-w-none text-slate-900 font-medium flex-1">
-                      <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                      <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
                         {sanitizePromptText(currentQuestion.prompt)}
                       </ReactMarkdown>
                     </div>
@@ -614,7 +607,7 @@ export const QuizArenaPage: React.FC = () => {
                             {opt.id}
                           </span>
                           <div className="flex-1 font-sans text-xs sm:text-sm font-medium">
-                            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                            <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
                               {formatMathForMarkdown(opt.text)}
                             </ReactMarkdown>
                           </div>
@@ -631,7 +624,7 @@ export const QuizArenaPage: React.FC = () => {
                         <span>Targeted Hint:</span>
                       </strong>
                       <div className="prose prose-xs max-w-none text-amber-900 font-medium leading-relaxed">
-                        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                        <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
                           {formatMathForMarkdown(currentQuestion.hint)}
                         </ReactMarkdown>
                       </div>

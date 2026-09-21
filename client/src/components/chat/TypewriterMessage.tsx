@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
+import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
 
 import { markdownCardStyles } from '../../utils/markdownCards';
+import { normalizeLatexDelimiters } from '../../utils/latex';
 
 interface TypewriterMessageProps {
   content: string;
@@ -78,7 +80,7 @@ export const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
       title={isTyping ? 'Click message to skip typewriter animation' : undefined}
     >
       <ReactMarkdown
-        remarkPlugins={[remarkMath]}
+        remarkPlugins={[remarkMath, remarkGfm]}
         rehypePlugins={[rehypeKatex]}
         components={{
           ul: ({ ...props }) => <ul className={markdownCardStyles.list} {...props} />,
@@ -88,9 +90,22 @@ export const TypewriterMessage: React.FC<TypewriterMessageProps> = ({
           h4: ({ ...props }) => <h4 className={markdownCardStyles.heading3} {...props} />,
           blockquote: ({ ...props }) => <blockquote className={markdownCardStyles.blockquote} {...props} />,
           p: ({ ...props }) => <p className={markdownCardStyles.paragraph} {...props} />,
+          // GFM tables: render real <table> elements inside a horizontal-scroll wrapper
+          // so wide attempt/stats tables stay readable instead of spilling out of the bubble.
+          table: ({ ...props }) => (
+            <div className="w-full overflow-x-auto subtle-scroll my-2">
+              <table className="w-full text-xs border-collapse" {...props} />
+            </div>
+          ),
+          th: ({ ...props }) => (
+            <th className="border border-slate-200 bg-slate-50 px-2 py-1.5 text-left font-semibold text-slate-700 whitespace-nowrap" {...props} />
+          ),
+          td: ({ ...props }) => (
+            <td className="border border-slate-200 px-2 py-1.5 align-top text-slate-700" {...props} />
+          ),
         }}
       >
-        {visibleText}
+        {normalizeLatexDelimiters(visibleText)}
       </ReactMarkdown>
 
       {/* Glowing Typewriter Cursor */}

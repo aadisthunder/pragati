@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { apiRequest } from '../api/client';
@@ -26,19 +26,39 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/**
+ * Demo judge credentials are sourced from env so they can be rotated (or pointed at a
+ * disposable demo account) without a code change. NOTE: anything in the client bundle is
+ * public — the real protection for the demo account must come from Supabase RLS
+ * (see supabase/schema.sql for a read-only demo-account policy).
+ */
+const DEMO_JUDGE_EMAIL = import.meta.env.VITE_DEMO_JUDGE_EMAIL || 'judge.pragati@gmail.com';
+const DEMO_JUDGE_PASSWORD = import.meta.env.VITE_DEMO_JUDGE_PASSWORD || 'JudgeDemoPassword2026!';
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const profileFetchRef = useRef<Promise<void> | null>(null);
+
+  // Deduplicated profile fetch: supabase.auth.onAuthStateChange fires for several events in
+  // quick succession (INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED...). Without dedup each one
+  // spawned a parallel /api/auth/me request; failures also left a silently stale profile.
   const fetchProfile = async () => {
-    try {
-      const data = await apiRequest<{ user: UserProfile }>('/api/auth/me');
-      setProfile(data.user);
-    } catch (err) {
-      console.error('Failed to fetch profile', err);
-    }
+    if (profileFetchRef.current) return profileFetchRef.current;
+    profileFetchRef.current = (async () => {
+      try {
+        const data = await apiRequest<{ user: UserProfile }>('/api/auth/me');
+        setProfile(data.user);
+      } catch (err) {
+        console.error('Failed to fetch profile', err);
+      } finally {
+        profileFetchRef.current = null;
+      }
+    })();
+    return profileFetchRef.current;
   };
 
   useEffect(() => {
@@ -92,8 +112,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signInAsJudge = async () => {
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: 'judge.pragati@gmail.com',
-      password: 'JudgeDemoPassword2026!',
+      email: DEMO_JUDGE_EMAIL,
+      password: DEMO_JUDGE_PASSWORD,
     });
     if (error) throw error;
     if (data.session) {

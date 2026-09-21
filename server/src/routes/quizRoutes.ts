@@ -154,7 +154,16 @@ quizRouter.post('/:id/submit', async (req: AuthenticatedRequest, res: Response):
       hints_used: t.hints_used,
     }));
 
-    await scopedClient.from('question_telemetry').insert(telemetryToInsert);
+    // Telemetry loss must not be silent, but the attempt itself already persisted —
+    // failing the whole request here would invite duplicate-attempt retries from the client.
+    const warnings: string[] = [];
+    const { error: telemetryError } = await scopedClient
+      .from('question_telemetry')
+      .insert(telemetryToInsert);
+    if (telemetryError) {
+      console.error('Question telemetry insert failed:', telemetryError.message);
+      warnings.push(`Attempt saved but per-question telemetry could not be stored: ${telemetryError.message}`);
+    }
 
     // 6. Update user's rating in user_profiles
     const { data: profile } = await scopedClient
@@ -166,13 +175,18 @@ quizRouter.post('/:id/submit', async (req: AuthenticatedRequest, res: Response):
     const currentRating = profile?.skill_rating || 1200;
     const newRating = calculateUpdatedRating(currentRating, summary.accuracy_pct);
 
-    await scopedClient
+    const { error: ratingUpdateError } = await scopedClient
       .from('user_profiles')
       .update({ skill_rating: newRating, updated_at: new Date().toISOString() })
       .eq('id', userId);
+    if (ratingUpdateError) {
+      console.error('Skill rating update failed:', ratingUpdateError.message);
+      warnings.push(`Attempt saved but the skill rating could not be updated: ${ratingUpdateError.message}`);
+    }
 
     res.json({
       attempt_id: attempt.id,
+      ...(warnings.length > 0 ? { warnings } : {}),
       summary: {
         ...summary,
         old_rating: currentRating,

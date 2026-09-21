@@ -31,6 +31,7 @@ export const SYSTEM_PROMPT = `You are Pragati AI Instructor, an intelligent, emp
 Your core teaching philosophy is Socratic:
 1. Guide students step-by-step through first principles instead of immediately giving away flat answers.
 2. Render all mathematical equations, scientific variables, and formulas using clean LaTeX format (e.g. $E = mc^2$ or $$\\int x dx$$).
+   - LaTeX delimiter rule: use $...$ for inline math and $$...$$ for display math. NEVER use the delimiters \(...\) or \[...\] — they do not render in the student interface.
 3. Strictly DO NOT use emojis anywhere in your responses, titles, or explanations. Use clear typography and bullet points.
 4. Conversational Flow & Intent:
    - Always prioritize the user's latest message.
@@ -46,6 +47,7 @@ Your core teaching philosophy is Socratic:
    - "explain_missed_question": Call this to retrieve question details for a specific question ID.
 6. Formatting & Visual Presentation:
    - When presenting available tools, key concepts, study topics, or structured steps, format each item as a bullet point with a bold title (e.g. "- **Title**: Description"). These render as individual visual outline cards in the student's interface.
+   - Strongly prefer bold bullet-point cards over wide markdown tables for listing attempts, stats, or comparisons (tables with many columns wrap badly on the student's screen). If a markdown table is truly essential, keep it to a maximum of 3 short columns.
    - Separate distinct ideas, sections, and topics with clean blank lines and markdown subheadings (###) to maintain generous vertical spacing and prevent dense walls of text.`;
 
 /**
@@ -217,6 +219,32 @@ export function validateChatMessage(message: any): { valid: boolean; error?: str
 
 export type AgentStepCallback = (step: { phase: string; text: string; tool?: string }) => void;
 
+const FENCE_TOKEN = '\u0000FENCE';
+
+/**
+ * Rewrites OpenAI-style LaTeX delimiters \(...\) and \[...\] into the $/$$ delimiters
+ * the client's remark-math pipeline understands, so stored replies never render as raw
+ * TeX source in the chat UI. Fenced code blocks are protected from rewriting.
+ */
+export function normalizeLatexDelimiters(input: string): string {
+  if (!input || typeof input !== 'string') return '';
+
+  const fences: string[] = [];
+  let text = input.replace(/```[\s\S]*?```/g, (match) => {
+    fences.push(match);
+    return `${FENCE_TOKEN}${fences.length - 1}${FENCE_TOKEN}`;
+  });
+
+  text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_m, body: string) => `$$${body}$$`);
+  text = text.replace(/\\\(([\s\S]*?)\\\)/g, (_m, body: string) => `$${body}$`);
+
+  text = text.replace(new RegExp(`${FENCE_TOKEN}(\\d+)${FENCE_TOKEN}`, 'g'), (_m, i: string) =>
+    fences[Number(i)]
+  );
+
+  return text;
+}
+
 const FRIENDLY_TOOL_STATUS: Record<string, string> = {
   generate_quiz: 'Crafting your practice assessment...',
   get_student_performance: 'Analyzing your academic performance and stats...',
@@ -346,6 +374,10 @@ export async function processAgentChat(
       finalReply = `I have generated your practice quiz on **${topic}**. You can start taking it using the interactive card below!`;
     }
   }
+
+  // Normalize LaTeX delimiters once before persisting/returning so the chat UI renders
+  // math correctly regardless of which delimiter style the model chose this turn.
+  finalReply = normalizeLatexDelimiters(finalReply);
 
   if (!finalReply) {
     if (toolExecutions.length > 0) {

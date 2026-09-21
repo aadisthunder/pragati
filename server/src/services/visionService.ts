@@ -105,7 +105,7 @@ export async function extractTextFromImage(imageBase64: string): Promise<string>
 
   let rawExtracted = '';
 
-  const visionModel = process.env.GROQ_VISION_MODEL || 'qwen/qwen3.6-27b';
+  const visionModel = process.env.GROQ_VISION_MODEL || 'qwen/qwen3.8-27b';
 
   // 1. Primary: Groq Multimodal Vision (fast LPU latency, clean LaTeX extraction)
   try {
@@ -119,7 +119,9 @@ export async function extractTextFromImage(imageBase64: string): Promise<string>
   // 2. Fallback to secondary vision model if primary failed or returned empty
   if (!rawExtracted || rawExtracted === 'NONE') {
     try {
-      const fallbackVisionLlm = getLLM('qwen/qwen3.8-27b', 0.1, 300, 0, 5000);
+      // Groq currently exposes a single vision model, so the fallback retries the same
+      // (validated) model ID once — transient network/API errors are the common case.
+      const fallbackVisionLlm = getLLM(visionModel, 0.1, 300, 0, 5000);
       const fbResponse = await fallbackVisionLlm.invoke([message]);
       rawExtracted = typeof fbResponse.content === 'string' ? fbResponse.content.trim() : JSON.stringify(fbResponse.content);
     } catch (fbErr: any) {
