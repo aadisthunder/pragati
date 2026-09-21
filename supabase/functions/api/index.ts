@@ -508,7 +508,7 @@ Deno.serve(async (req: Request) => {
             Authorization: `Bearer ${groqApiKey}`,
           },
           body: JSON.stringify({
-            model: 'qwen/qwen3.6-27b',
+            model: Deno.env.get('GROQ_VISION_MODEL') || 'qwen/qwen3.8-27b',
             messages: [
               {
                 role: 'user',
@@ -578,7 +578,7 @@ Deno.serve(async (req: Request) => {
               Authorization: `Bearer ${groqApiKey}`,
             },
             body: JSON.stringify({
-              model: 'qwen/qwen3.6-27b',
+              model: Deno.env.get('GROQ_VISION_MODEL') || 'qwen/qwen3.8-27b',
               messages: [
                 {
                   role: 'user',
@@ -599,7 +599,12 @@ Deno.serve(async (req: Request) => {
             }),
           });
 
-          if (visionRes.ok) {
+          if (!visionRes.ok) {
+            const visionErrText = await visionRes.text().catch(() => '');
+            console.error(`Vision model error in chat: ${visionRes.status} ${visionErrText}`);
+            // Tell the model the image failed so it can tell the user, instead of silently ignoring it
+            promptForAgent = `${trimmedMessage}\n\n[System note: The attached image could not be processed (error ${visionRes.status}). Please briefly mention that the image could not be read and ask the student to re-upload or type the problem.]`;
+          } else {
             const visionData = await visionRes.json();
             const extracted = visionData.choices?.[0]?.message?.content?.trim();
             if (extracted && extracted !== 'NONE') {
