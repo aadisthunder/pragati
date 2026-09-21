@@ -45,6 +45,11 @@ jobs:
 
       - name: Run server tests
         working-directory: server
+        env:
+          # Placeholder config so module imports validate; tests never make real calls
+          SUPABASE_URL: https://placeholder.supabase.co
+          SUPABASE_ANON_KEY: placeholder-anon-key
+          GROQ_API_KEY: placeholder-groq-key
         run: npm test
 
   deploy:
