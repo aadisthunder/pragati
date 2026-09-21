@@ -10,6 +10,7 @@ import {
 export { getFromCache, isCacheFresh, setInCache, invalidateCache };
 
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 export function formatApiUrl(base: string, endpoint: string): string {
   if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {
@@ -56,6 +57,10 @@ export async function apiRequest<T = any>(
 
   const headers = new Headers(options.headers || {});
   headers.set('Authorization', `Bearer ${token}`);
+  // Supabase functions gateway requires the apikey header on raw fetch calls
+  if (SUPABASE_ANON_KEY && !headers.has('apikey')) {
+    headers.set('apikey', SUPABASE_ANON_KEY);
+  }
   if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
   }
@@ -129,6 +134,10 @@ export async function apiStreamRequest(
 
   const headers = new Headers(options.headers || {});
   headers.set('Authorization', `Bearer ${token}`);
+  // Supabase functions gateway requires the apikey header on raw fetch calls
+  if (SUPABASE_ANON_KEY && !headers.has('apikey')) {
+    headers.set('apikey', SUPABASE_ANON_KEY);
+  }
   headers.set('Accept', 'text/event-stream');
   if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');

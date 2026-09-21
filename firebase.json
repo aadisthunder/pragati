@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "pragati-aadi",
     "public": "client/dist",
     "ignore": [
       "firebase.json",
