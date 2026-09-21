@@ -1,4 +1,13 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import {
+  AGENT_TOOL_SPECS,
+  extractToolCallsFromGroq,
+  sanitizeToolArgs,
+  extractQuizJson,
+  buildQuizGenerationPrompt,
+  containsQuizSpoilers,
+  buildQuizReadyFallback,
+} from './_shared/agent-tools.ts';
 
 const allowedOrigins = [
   'https://pragati-aadi.web.app',
@@ -7,12 +16,25 @@ const allowedOrigins = [
   'http://127.0.0.1:5173',
 ];
 
+/**
+ * Origin allowlist patterns: any localhost/dev-server port plus Firebase
+ * Hosting sites and preview channels (e.g. pragati-aadi--abc123.web.app).
+ */
+function isAllowedOrigin(origin: string): boolean {
+  if (allowedOrigins.includes(origin)) return true;
+  if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return true;
+  if (/^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) return true;
+  if (/^https:\/\/[a-z0-9-]+\.web\.app$/.test(origin)) return true;
+  if (/^https:\/\/[a-z0-9-]+\.firebaseapp\.com$/.test(origin)) return true;
+  return false;
+}
+
 const SYSTEM_PROMPT =
   'You are Pragati AI Instructor, a warm, encouraging, and rigorous Socratic learning mentor. Never give direct answers right away. Guide students with probing questions, analogies, and conceptual hints. Format equations in LaTeX ($...$ for inline, $$...$$ for block). NEVER use emojis.';
 
 Deno.serve(async (req: Request) => {
   const origin = req.headers.get('Origin') || '';
-  const isAllowed = allowedOrigins.includes(origin);
+  const isAllowed = isAllowedOrigin(origin);
   const corsOrigin = isAllowed ? origin : 'https://pragati-aadi.web.app';
 
   const corsHeaders = {
@@ -636,41 +658,347 @@ Deno.serve(async (req: Request) => {
       // Cap to latest 15 turns
       const boundedHistory = sanitizedHistory.slice(-15);
 
-      // Call Groq API for Socratic reasoning
-      const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${groqApiKey}`,
-        },
-        body: JSON.stringify({
-          model: Deno.env.get('GROQ_MODEL') || 'openai/gpt-oss-120b',
-          messages: [
-            {
-              role: 'system',
-              content: SYSTEM_PROMPT,
-            },
-            ...boundedHistory,
-            { role: 'user', content: promptForAgent },
-          ],
-          temperature: 0.7,
-        }),
-      });
+      // ---------------------------------------------------------------------
+      // Tool-calling agent loop (mirrors the Express server's LangChain agent)
+      // ---------------------------------------------------------------------
+      const chatMessages: any[] = [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...boundedHistory,
+        { role: 'user', content: promptForAgent },
+      ];
 
-      if (!groqRes.ok) {
-        const errText = await groqRes.text();
-        return errorResponse(`Groq API Error: ${errText}`, groqRes.status);
+      const toolExecutions: any[] = [];
+      const maxIterations = 3;
+      let assistantMessage: any = null;
+
+      const callGroq = (messages: any[], withTools: boolean) =>
+        fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${groqApiKey}`,
+          },
+          body: JSON.stringify({
+            model: Deno.env.get('GROQ_MODEL') || 'openai/gpt-oss-120b',
+            messages,
+            temperature: 0.7,
+            ...(withTools ? { tools: AGENT_TOOL_SPECS, tool_choice: 'auto' } : {}),
+          }),
+        });
+
+      let iteration = 0;
+      while (iteration < maxIterations) {
+        iteration++;
+
+        const res = await callGroq(chatMessages, true);
+        if (!res.ok) {
+          const errText = await res.text();
+          return errorResponse(`Groq API Error: ${errText}`, res.status);
+        }
+        const data = await res.json();
+        assistantMessage = data.choices?.[0]?.message;
+        if (!assistantMessage) break;
+
+        const toolCalls = extractToolCallsFromGroq(assistantMessage);
+        if (toolCalls.length === 0) break;
+
+        // Replay the assistant's tool-call turn so the transcript stays valid
+        chatMessages.push(assistantMessage);
+
+        for (const call of toolCalls) {
+          const args = sanitizeToolArgs(call.name, call.args, trimmedMessage);
+
+          if (call.name === 'generate_quiz') {
+            // 1) Ask the LLM for the quiz JSON
+            const quizPrompt = buildQuizGenerationPrompt({
+              topic: args.topic,
+              difficulty: args.difficulty,
+              num_questions: args.num_questions,
+            });
+            const quizRes = await callGroq(
+              [
+                { role: 'system', content: 'You are a quiz generation engine. Output ONLY the requested JSON object. No prose, no code fences.' },
+                { role: 'user', content: quizPrompt },
+              ],
+              false
+            );
+            let toolResult: string;
+            if (quizRes.ok) {
+              const quizData = await quizRes.json();
+              const quizContent = quizData.choices?.[0]?.message?.content || '';
+              const parsed = extractQuizJson(quizContent);
+              const questionsList = Array.isArray(parsed?.questions)
+                ? parsed.questions
+                : Array.isArray(parsed?.quiz)
+                ? parsed.quiz
+                : [];
+
+              if (parsed && questionsList.length > 0) {
+                // 2) Persist quiz + questions with Row Level Security intact
+                const { data: quizRow, error: quizError } = await supabase
+                  .from('quizzes')
+                  .insert({
+                    created_by: userId,
+                    topic: parsed.topic || args.topic,
+                    difficulty: parsed.difficulty || args.difficulty,
+                    total_questions: questionsList.length,
+                  })
+                  .select()
+                  .single();
+
+                if (quizError || !quizRow) {
+                  toolResult = JSON.stringify({
+                    action: 'ERROR',
+                    error: `Failed to save quiz: ${quizError?.message || 'Unknown database error'}`,
+                  });
+                } else {
+                  const questionsToInsert = questionsList.map((q: any, idx: number) => ({
+                    quiz_id: quizRow.id,
+                    prompt: q.prompt || 'Question',
+                    options: Array.isArray(q.options) ? q.options : [],
+                    correct_answer: q.correct_answer || 'A',
+                    hint: q.hint || '',
+                    explanation: q.explanation || '',
+                    order_index: idx,
+                  }));
+
+                  const { error: questionsError } = await supabase
+                    .from('questions')
+                    .insert(questionsToInsert);
+
+                  toolResult = questionsError
+                    ? JSON.stringify({
+                        action: 'ERROR',
+                        error: `Quiz created (${quizRow.id}) but failed to insert questions: ${questionsError.message}`,
+                      })
+                    : JSON.stringify({
+                        action: 'QUIZ_GENERATED',
+                        quiz_id: quizRow.id,
+                        topic: quizRow.topic,
+                        difficulty: quizRow.difficulty,
+                        total_questions: questionsList.length,
+                        message: `Successfully generated a ${questionsList.length}-question quiz on "${quizRow.topic}".`,
+                      });
+                }
+              } else {
+                toolResult = JSON.stringify({
+                  action: 'ERROR',
+                  error: 'Failed to parse generated quiz structure into valid JSON.',
+                });
+              }
+            } else {
+              const quizErr = await quizRes.text().catch(() => '');
+              toolResult = JSON.stringify({
+                action: 'ERROR',
+                error: `Quiz generation LLM call failed: ${quizErr.slice(0, 300)}`,
+              });
+            }
+
+            toolExecutions.push({ name: call.name, args, result: toolResult });
+            chatMessages.push({
+              role: 'tool',
+              tool_call_id: call.id,
+              content: toolResult,
+            });
+            continue;
+          }
+
+          // ---- Read-only tools: query Supabase with the user's JWT (RLS applies)
+          let toolResult: string;
+          try {
+            if (call.name === 'get_student_attempts') {
+              const { data, error } = await supabase
+                .from('quiz_attempts')
+                .select('id, quiz_id, score, total_questions, accuracy_pct, total_time_sec, completed_at, quizzes(topic, difficulty)')
+                .order('completed_at', { ascending: false })
+                .limit(args.limit || 5);
+              toolResult = error
+                ? `Error fetching quiz history: ${error.message}`
+                : !data || data.length === 0
+                ? 'The student has not attempted any quizzes yet.'
+                : JSON.stringify(data);
+            } else if (call.name === 'get_attempt_telemetry') {
+              const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+              if (!args.attempt_id || !uuidRe.test(args.attempt_id)) {
+                toolResult = 'Error: a valid attempt_id (UUID) is required. Ask the student to pick a specific past attempt.';
+              } else {
+                const { data, error } = await supabase
+                  .from('question_telemetry')
+                  .select('id, question_id, selected_answer, is_correct, is_skipped, dwell_time_sec, hints_used, questions(prompt, options, correct_answer, explanation)')
+                  .eq('attempt_id', args.attempt_id);
+                if (error) {
+                  toolResult = `Error fetching attempt telemetry: ${error.message}`;
+                } else if (!data || data.length === 0) {
+                  toolResult = `No telemetry records found for attempt ID ${args.attempt_id}.`;
+                } else {
+                  const missed = data.filter((t: any) => !t.is_correct || t.is_skipped);
+                  toolResult = JSON.stringify({
+                    total_answered: data.length,
+                    missed_or_skipped_count: missed.length,
+                    questions: data,
+                  });
+                }
+              }
+            } else if (call.name === 'explain_missed_question') {
+              const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+              if (!args.question_id || !uuidRe.test(args.question_id)) {
+                toolResult = 'Error: a valid question_id (UUID) is required.';
+              } else {
+                const { data, error } = await supabase
+                  .from('questions')
+                  .select('id, prompt, options, correct_answer, hint, explanation')
+                  .eq('id', args.question_id)
+                  .single();
+                toolResult = error || !data
+                  ? `Question not found: ${error?.message || ''}`
+                  : JSON.stringify(data);
+              }
+            } else if (call.name === 'get_student_performance') {
+              const { data: profile } = await supabase
+                .from('user_profiles')
+                .select('skill_rating, full_name')
+                .maybeSingle();
+
+              const { count: totalAttempts } = await supabase
+                .from('quiz_attempts')
+                .select('id', { count: 'exact', head: true });
+
+              const { data: attempts, error } = await supabase
+                .from('quiz_attempts')
+                .select('id, quiz_id, score, total_questions, accuracy_pct, total_time_sec, completed_at, quizzes(topic, difficulty)')
+                .order('completed_at', { ascending: false })
+                .limit(args.limit || 5);
+
+              if (error) {
+                toolResult = JSON.stringify({ action: 'ERROR', error: `Failed to retrieve performance: ${error.message}` });
+              } else {
+                const attemptsList = attempts || [];
+                const trueTotalAttempts = typeof totalAttempts === 'number' ? totalAttempts : attemptsList.length;
+                if (attemptsList.length === 0) {
+                  toolResult = JSON.stringify({
+                    action: 'PERFORMANCE_RETRIEVED',
+                    has_attempts: false,
+                    skill_rating: profile?.skill_rating || 1200,
+                    overall_accuracy: 0,
+                    total_attempts: trueTotalAttempts,
+                    recent_attempts_count: 0,
+                    recent_attempts: [],
+                    message: 'You have not completed any quizzes yet. Take your first quiz in the Quizzes Arena to build your performance profile!',
+                  });
+                } else {
+                  let totalScore = 0;
+                  let totalQuestions = 0;
+                  for (const att of attemptsList) {
+                    totalScore += att.score || 0;
+                    totalQuestions += att.total_questions || 0;
+                  }
+                  const overallAccuracy = totalQuestions > 0 ? Number(((totalScore / totalQuestions) * 100).toFixed(1)) : 0;
+                  toolResult = JSON.stringify({
+                    action: 'PERFORMANCE_RETRIEVED',
+                    has_attempts: true,
+                    skill_rating: profile?.skill_rating || 1200,
+                    overall_accuracy: overallAccuracy,
+                    total_attempts: trueTotalAttempts,
+                    recent_attempts_count: attemptsList.length,
+                    recent_attempts: attemptsList.map((a: any) => ({
+                      id: a.id,
+                      topic: (a.quizzes as any)?.topic || 'General',
+                      difficulty: (a.quizzes as any)?.difficulty || 'intermediate',
+                      score: a.score,
+                      total_questions: a.total_questions,
+                      accuracy_pct: a.accuracy_pct,
+                      completed_at: a.completed_at,
+                    })),
+                  });
+                }
+              }
+            } else if (call.name === 'get_questions_to_review') {
+              const { data: missedQuestions, error } = await supabase
+                .from('question_telemetry')
+                .select('id, question_id, attempt_id, selected_answer, is_correct, is_skipped, dwell_time_sec, hints_used, created_at, questions(prompt, options, correct_answer, explanation, quiz_id, quizzes(topic))')
+                .or('is_correct.eq.false,is_skipped.eq.true')
+                .order('created_at', { ascending: false })
+                .limit(args.limit || 10);
+
+              if (error) {
+                toolResult = JSON.stringify({ action: 'ERROR', error: `Failed to retrieve questions to review: ${error.message}` });
+              } else {
+                const list = (missedQuestions || []).map((m: any) => ({
+                  id: m.id,
+                  question_id: m.question_id,
+                  topic: (m.questions as any)?.quizzes?.topic || 'General',
+                  prompt: (m.questions as any)?.prompt || '',
+                  options: (m.questions as any)?.options || [],
+                  selected_answer: m.selected_answer,
+                  correct_answer: (m.questions as any)?.correct_answer,
+                  explanation: (m.questions as any)?.explanation,
+                  dwell_time_sec: m.dwell_time_sec,
+                  hints_used: m.hints_used,
+                  is_skipped: m.is_skipped,
+                }));
+                toolResult = JSON.stringify({
+                  action: 'QUESTIONS_TO_REVIEW_RETRIEVED',
+                  has_questions: list.length > 0,
+                  total_missed: list.length,
+                  questions: list,
+                  message: list.length === 0 ? 'Great job! You have zero unreviewed missed questions.' : undefined,
+                });
+              }
+            } else {
+              toolResult = `Unknown tool: ${call.name}`;
+            }
+          } catch (toolErr: any) {
+            toolResult = `Error executing ${call.name}: ${toolErr?.message || 'unknown error'}`;
+          }
+
+          toolExecutions.push({ name: call.name, args, result: toolResult });
+          chatMessages.push({
+            role: 'tool',
+            tool_call_id: call.id,
+            content: toolResult,
+          });
+        }
       }
 
-      const groqData = await groqRes.json();
-      const rawReply = groqData.choices?.[0]?.message?.content || 'I could not process your request at this moment.';
-      const cleanReply = rawReply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+      // Final prose turn (no tools) so the model summarizes with tool results in context
+      if (!assistantMessage || extractToolCallsFromGroq(assistantMessage).length > 0 || toolExecutions.length > 0) {
+        const finalRes = await callGroq(chatMessages, false);
+        if (finalRes.ok) {
+          const finalData = await finalRes.json();
+          const finalMessage = finalData.choices?.[0]?.message;
+          if (finalMessage?.content) {
+            assistantMessage = finalMessage;
+          }
+        }
+      }
+
+      const rawReply = assistantMessage?.content || 'I could not process your request at this moment.';
+      let cleanReply = String(rawReply).replace(/<[\s\S]*?<\/think>/gi, '').trim();
+
+      // If generate_quiz ran, never let question text leak into chat prose
+      const quizGenExec = toolExecutions.find((t) => t.name === 'generate_quiz');
+      if (quizGenExec) {
+        let resObj: any = null;
+        try {
+          resObj = typeof quizGenExec.result === 'string' ? JSON.parse(quizGenExec.result) : quizGenExec.result;
+        } catch {
+          // result is not JSON — treat as generic success path below
+        }
+        if (resObj?.action === 'ERROR') {
+          cleanReply = `I ran into a problem while creating that quiz: ${resObj.error}. Want me to try again with a different topic or difficulty?`;
+        } else {
+          const topic = resObj?.topic || 'the requested topic';
+          if (!cleanReply || containsQuizSpoilers(cleanReply)) {
+            cleanReply = buildQuizReadyFallback(topic);
+          }
+        }
+      }
 
       // Save to chat_messages if session provided
       if (body.sessionId && body.sessionId !== 'new') {
         await supabase.from('chat_messages').insert([
           { session_id: body.sessionId, user_id: userId, role: 'user', content: trimmedMessage },
-          { session_id: body.sessionId, user_id: userId, role: 'assistant', content: cleanReply, tool_calls: [] },
+          { session_id: body.sessionId, user_id: userId, role: 'assistant', content: cleanReply, tool_calls: toolExecutions },
         ]);
       }
 
@@ -693,7 +1021,7 @@ Deno.serve(async (req: Request) => {
                 `data: ${JSON.stringify({
                   type: 'done',
                   reply: cleanReply,
-                  toolExecutions: [],
+                  toolExecutions,
                   sessionId: body.sessionId,
                 })}\n\n`
               )
@@ -714,7 +1042,7 @@ Deno.serve(async (req: Request) => {
 
       return jsonResponse({
         reply: cleanReply,
-        toolExecutions: [],
+        toolExecutions,
         sessionId: body.sessionId,
       });
     }
