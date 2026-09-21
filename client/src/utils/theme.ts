@@ -197,14 +197,30 @@ export function shouldSubmitOnEnter(
  * Clean borderless attachment upload icon button styling
  */
 export function getUploadButtonClass(): string {
-  return 'w-9 h-9 sm:w-10 sm:h-10 flex-shrink-0 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-colors flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer';
+  return 'w-10 h-10 flex-shrink-0 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-colors flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer';
+}
+
+/**
+ * Chat message body typography. 15px on mobile so answers stay comfortably
+ * readable without zooming; slightly roomier leading for small screens.
+ */
+export function getChatMessageTextClass(): string {
+  return 'text-[15px] sm:text-[15.5px] leading-relaxed';
+}
+
+/**
+ * Composer textarea typography — 16px floor on mobile prevents iOS Safari
+ * from zooming the viewport when the input gains focus; 15px on desktop.
+ */
+export function getComposerTextareaClass(): string {
+  return 'flex-1 px-2 sm:px-3 py-1.5 bg-white text-[16px] sm:text-[15px] text-slate-900 placeholder:text-slate-400 focus:outline-none resize-none transition disabled:bg-transparent disabled:text-slate-500 leading-normal max-h-32 sm:max-h-48 subtle-scroll';
 }
 
 /**
  * Suggestion chips container styling without visible scrollbar while preserving swipe
  */
 export function getSuggestionChipsContainerClass(): string {
-  return 'pointer-events-auto flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1 px-1 justify-start sm:justify-center w-full max-w-3xl mx-auto flex-nowrap';
+  return 'pointer-events-auto flex flex-wrap items-center gap-1.5 sm:gap-2 py-1 px-1 justify-center w-full max-w-3xl mx-auto';
 }
 
 /**
@@ -212,7 +228,7 @@ export function getSuggestionChipsContainerClass(): string {
  * Enforces a single centered line on desktop, while smoothly scrolling without visible scrollbar on mobile
  */
 export function getHeroSuggestionChipsContainerClass(): string {
-  return 'pointer-events-auto flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-1 px-2 w-full max-w-3xl mx-auto justify-start sm:justify-center flex-nowrap';
+  return 'pointer-events-auto flex flex-wrap items-center gap-1.5 sm:gap-2 py-1 px-2 w-full max-w-3xl mx-auto justify-center';
 }
 
 /**
