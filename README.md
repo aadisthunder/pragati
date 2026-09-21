@@ -4,339 +4,305 @@
 
 <img src="client/public/logo.png" alt="Pragati Logo" width="100" height="100" style="border-radius: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);" />
 
-### Intelligent Socratic AI Learning Companion & Telemetry-Driven Assessment Arena
+### Your personal AI teacher that makes sure you truly understand a topic — not just memorise it.
 
-[![Live Demo](https://img.shields.io/badge/Live_Demo-pragati--aadi.web.app-7C3AED?style=for-the-badge&logo=firebase&logoColor=white)](https://pragati-aadi.web.app)
-[![GitHub](https://img.shields.io/badge/GitHub-aadisthunder%2Fpragati-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/aadisthunder/pragati)
-
-[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
-[![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Vite](https://img.shields.io/badge/Vite-6.0-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vitejs.dev/)
-[![Groq](https://img.shields.io/badge/Groq-LPU_Inference-F55036?style=flat-square&logo=groq&logoColor=white)](https://groq.com/)
-[![Supabase](https://img.shields.io/badge/Supabase-Auth_&_Postgres-3ECF8E?style=flat-square&logo=supabase&logoColor=white)](https://supabase.com/)
-[![Firebase](https://img.shields.io/badge/Firebase-Hosting-FFA611?style=flat-square&logo=firebase&logoColor=black)](https://firebase.google.com/)
-[![TailwindCSS](https://img.shields.io/badge/Tailwind-CSS_3.4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
-
-*Built for STEM students, competitive exam aspirants, and curious minds who want to master concepts through first principles instead of memorizing flat answers.*
-
-**Live Application**: [https://pragati-aadi.web.app](https://pragati-aadi.web.app)
+**Try it here**: [https://pragati-aadi.web.app](https://pragati-aadi.web.app)
 
 </div>
 
 ---
 
+Hi! Thanks for checking out my project. 🙂
+
+**Pragati** means "progress" in Sanskrit. I built it because of a simple problem we all face while studying — we read something, feel like we understood it, and then forget it in two days. Pragati fixes this with a loop: **learn → get tested → find your weak spots → revise exactly those → repeat until you have fully mastered the topic.**
+
+Think of it as a strict but friendly teacher who never lets a concept slip through the cracks.
+
+---
+
 ## Table of Contents
 
-- [Overview](#overview)
-- [Live Demo](#live-demo)
-- [Core Features](#core-features)
-- [System Architecture (BFF Pattern)](#system-architecture-bff-pattern)
-- [AI Engine & Capabilities](#ai-engine--capabilities)
-- [Design System](#design-system)
-- [Security & Production Hardening](#security--production-hardening)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Environment Setup](#environment-setup)
-  - [Local Development](#local-development)
-  - [Testing](#testing)
-- [Deployment Guide](#deployment-guide)
-- [Hackathon Demo Access](#hackathon-demo-access)
+- [What can Pragati do?](#what-can-pragati-do)
+- [How it works (architecture)](#how-it-works-architecture)
+- [Tech I used](#tech-i-used)
+- [How I kept it secure](#how-i-kept-it-secure)
+- [Run it on your machine](#run-it-on-your-machine)
+- [Running the tests](#running-the-tests)
+- [How to deploy it](#how-to-deploy-it)
+- [For judges and recruiters](#for-judges-and-recruiters)
 - [License](#license)
 
 ---
 
-## Overview
+## What can Pragati do?
 
-**Pragati** (*Sanskrit for "Progress"*) is an AI-driven academic learning platform engineered around an active **Closed-Loop Mastery Framework**. Rather than simply explaining answers or acting like a passive chat bot, Pragati helps students deeply learn any topic or subtopic, challenge their understanding through adaptive testing, diagnose weak spots with cognitive telemetry, and systematically review and re-learn missed concepts until 100% mastery is achieved.
+### 1. The mastery loop (the main idea)
 
-Pragati unites:
-1. **Deep Socratic Learning**: Active conceptual exploration through first-principles questioning and step-by-step guidance.
-2. **On-Demand Adaptive Testing**: Multi-level assessment generation triggered when the student feels ready, complete with in-quiz scaffolding and hints.
-3. **Cognitive Telemetry**: Precision tracking of per-question dwell time, hint dependencies, and hesitation patterns.
-4. **Targeted Review & Re-Teaching**: Dedicated remediation in the Analytics suite where the AI teaches the exact concepts behind incorrect answers in a continuous loop to mastery.
+This is the heart of the app:
 
----
+1. **Learn any topic** — Talk to the AI teacher. It will not simply hand you the answer. It asks you questions, gives small hints, and builds your understanding step by step, from the basics.
+2. **Take a test when you feel ready** — You decide when you are prepared. The AI makes a fresh test on exactly what you studied. You pick the difficulty (Beginner, Intermediate or Advanced) and the number of questions.
+3. **Get hints during the test** — Stuck on a question? Ask for a hint. It nudges you in the right direction without spoiling the answer.
+4. **See your weak spots** — While you attempt the test, Pragati quietly notes how long you took on each question, how many hints you used, and what you got wrong. From this it finds your exact weak concepts.
+5. **Revise what you got wrong** — The "Questions to Review" page shows every question you missed or skipped. One click, and the AI teacher re-teaches you that exact concept.
+6. **Repeat** — Take the test again, and keep going until you have mastered everything.
 
-## Live Demo
+### 2. The AI teacher (chat)
 
-The production application is live and accessible:
+- Guides you with questions instead of dumping answers.
+- Answers stream in live, word by word, so you never stare at a blank screen.
+- Handles math beautifully — all equations are properly typeset (you can write `$E = mc^2$` style math and it renders cleanly).
+- You can click a photo of a question from your textbook or notebook, and the AI can read it (works well for handwritten equations and diagrams too).
+- Changed your mind mid-answer? There is a stop button.
+- Your chats are saved as named sessions, so you can come back to them anytime.
 
-- **Web Application**: [https://pragati-aadi.web.app](https://pragati-aadi.web.app)
-- **Recruiter / Evaluator Quick Access**: On the login screen, click **"Instant Judge Login"** to evaluate the platform immediately with pre-loaded telemetry data, quiz attempts, and analytics without needing an OTP or Google account.
+### 3. Quiz arena
 
----
+- The AI creates a quiz on any topic you ask — for example "give me 10 questions on AC circuits, advanced level".
+- Fair play is built in: the correct answer and explanation are removed on the server before the questions reach your browser. No cheating by opening the network tab. 🙂
+- A question palette shows which questions you have attempted, skipped, or not visited yet.
+- One click takes you from any quiz question straight into a teaching session about it.
 
-## Core Features
+### 4. Analytics
 
-### 1. The Closed-Loop Mastery System (Core Experience)
-The defining feature of Pragati is its self-reinforcing mastery cycle that transforms passive studying into verified conceptual competence:
-- **Deep Conceptual Study**: Engage with the AI to deeply learn any topic or granular subtopic through first-principles reasoning without being spoon-fed answers.
-- **On-Demand Adaptive Testing**: Whenever a student feels they have grasped a topic sufficiently, the AI agent generates a comprehensive test tailored to those exact topics across selectable difficulty levels (Beginner, Intermediate, Advanced).
-- **In-Test Scaffolding & Hints**: While testing, students can request contextual hints if stuck, nudging critical thinking without spoiling the answer.
-- **Cognitive Telemetry & Weak-Spot Diagnostics**: As tests are submitted, Pragati records dwell time per question, hint consumption, and accuracy to pinpoint specific conceptual vulnerabilities.
-- **Targeted "Questions to Review" Re-Teaching**: On the Analytics page, a dedicated **Questions to Review** hub compiles every missed or skipped question. With a single click, the AI instructor steps in to actively re-teach the underlying concepts.
-- **Iterative Loop to True Mastery**: Students retake assessments and review weak concepts in an ongoing loop until every topic is fully mastered.
-
-### 2. Socratic AI Instructor & Multimodal Capture
-- **First-Principles Dialogue**: Guides students with targeted questions, scaffolding, and hints rather than dumping direct solutions.
-- **Sub-Second Streaming**: Powered by Groq LPU hardware with Server-Sent Events (SSE) streaming and live agent status pills ("Analyzing performance...", "Crafting your assessment...") that surface each tool call in real time.
-- **Flawless KaTeX Math Rendering**: Inline ($E = mc^2$) and block ($$\int_a^b f(x)\,dx$$) scientific typesetting. A dual-layer LaTeX normalizer (server + client) rewrites every delimiter style the model might emit (`$...$`, `$$...$$`, `\(...\)`, `\[...\]`) into perfectly rendered math — stored conversation history included.
-- **Dynamic Tool Calling**: Uses LangChain tools to inspect quiz history, diagnose missed questions, generate assessments, and pull performance telemetry on the fly — with multi-step tool loops and robust JSON repair for partial model outputs.
-- **Multimodal Problem Snapshot Capture**: Slide-up camera and photo gallery sheet letting students capture physical textbook problems, handwritten equations, or diagrams. Images are client-side compressed (~15 MB photos down to ~350 KB) and read by Groq multimodal vision (`qwen/qwen3.8-27b`) for LaTeX OCR.
-- **Interruptible Generation**: A one-click stop button aborts any in-flight AI response mid-stream.
-- **Quick Prompt Chips**: Fast one-click prompt pills (*Ask a doubt*, *Request a quiz topic*, *Review performance*, *Review missed questions*) in a clean single line on desktop, swipeable on mobile.
-- **Session Management**: Named chat sessions in a sidebar with deletion confirmation modals, instant cache-backed reload, and automatic first-message titling.
-
-### 3. Interactive Quiz Arena
-- **Dynamic Curriculum Generation**: AI crafts custom quizzes on any STEM topic with 4 choices, hints, and step-by-step explanations. Question count adapts to the request (e.g., "10 questions on AC circuits, advanced").
-- **Answer-Key Protection**: The question-fetching API strips `correct_answer` and `explanation` before delivery to the browser, and a post-generation guard prevents the model from spoiling answers in chat.
-- **Smart Quiz Palette**: Navigation grid showing attempted / unattempted / unvisited states with submit-time unanswered warnings.
-- **Flexible Timing HUD**: Per-question dwell time tracked invisibly for telemetry, plus a generous overall countdown.
-- **Immediate Socratic Remediation**: One-click transition from any quiz question directly into a tutoring session with the AI Instructor.
-- **Share Quizzes**: Native Web Share API integration with clipboard fallback.
-
-### 4. Telemetry-Driven Student Analytics
-- **"Questions to Review" Hub**: Centralized review arena listing all incorrect/skipped questions with one-click AI tutoring sessions and bulk/single dismissal.
-- **Cognitive Metrics**: Overall accuracy, average dwell time, total practice time, and accuracy progression curves (Recharts).
-- **Topic Mastery Breakdown**: Per-topic accuracy bars across Beginner / Intermediate / Advanced difficulty tiers.
-- **Adaptive Elo Rating**: Skill rating recalculated after every attempt (difficulty-weighted, floored at 800) with delta badges on the dashboard.
+- Overall accuracy, average time per question, and total practice time.
+- A progress curve that shows how you are improving over time.
+- Topic-wise breakdown so you know which topics need more love.
+- An Elo-style skill rating (like in chess) that goes up or down after every test, depending on the difficulty.
 
 ---
 
-## System Architecture (BFF Pattern)
+## How it works (architecture)
 
-Pragati strictly adheres to the **Backend-for-Frontend (BFF)** architectural pattern. The frontend client **never** communicates directly with the database or external AI model providers.
+One important design decision: **the frontend never talks to the database or the AI directly.** Everything goes through a backend. This keeps all the secret keys safely on the server side.
 
 ```mermaid
 graph TD
-    subgraph Client ["Frontend (React 18 + Vite)"]
-        UI["Glassmorphism UI"]
-        AuthCtx["AuthContext (JWT Session)"]
-        ApiClient["API Client (Auto-Refresh JWT, SWR Cache, Dedup)"]
+    subgraph Client ["Frontend (React + Vite)"]
+        UI["User Interface"]
+        Auth["Login (JWT session)"]
     end
 
-    subgraph Backend ["Backend (Node.js Express + LangChain)"]
-        AuthMW["Auth Middleware (JWT Verify)"]
-        RateLimit["Multi-Tier Rate Limiter (per-user)"]
-        Router["Express API Routes (/api/*)"]
-        Agent["LangChain Agent & Tools"]
-        Vision["Groq Multimodal Vision Service"]
+    subgraph Backend ["Backend (Supabase Edge Function)"]
+        Router["API Routes (/api/*)"]
+        Agent["AI Agent + Tools"]
     end
 
-    subgraph External ["Managed Cloud Services"]
-        Groq["Groq Cloud API (LPU Inference)"]
-        SupabaseAuth["Supabase Authentication"]
-        SupabaseDB[("Supabase PostgreSQL (RLS Protected)")]
+    subgraph External ["Cloud services"]
+        Groq["Groq (AI models)"]
+        SupaAuth["Supabase Auth"]
+        SupaDB[("Supabase PostgreSQL")]
     end
 
-    UI --> AuthCtx
-    AuthCtx --> ApiClient
-    ApiClient -->|Bearer JWT| AuthMW
-    AuthMW --> RateLimit
-    RateLimit --> Router
-    Router -->|User-Scoped Queries| SupabaseDB
+    UI --> Auth
+    Auth -->|"Bearer token"| Router
+    Router --> SupaDB
     Router --> Agent
-    Agent --> Vision
-    Vision --> Groq
     Agent --> Groq
-    AuthCtx -.->|OAuth / Magic Link| SupabaseAuth
+    Auth -.-> SupaAuth
 ```
 
----
+In simple words:
 
-## AI Engine & Capabilities
-
-| Capability | Model | Provider / Hardware | Notes |
-| :--- | :--- | :--- | :--- |
-| **Socratic Reasoning & Tools** | `openai/gpt-oss-120b` | Groq LPU | Tool-calling agent loop, SSE streaming |
-| **Multimodal Problem Vision** | `qwen/qwen3.8-27b` | Groq LPU | LaTeX OCR extraction, one automatic retry |
-
-*Model IDs are configurable via `GROQ_MODEL` / `GROQ_VISION_MODEL` environment variables.*
+1. You log in using Google or an email magic link (handled by Supabase Auth).
+2. The app sends all its requests to the backend with your login token.
+3. The backend checks your token, then talks to the database and the AI on your behalf.
+4. The database has **Row Level Security** switched on — which means even inside the database, you can only ever see your own data.
 
 ---
 
-## Design System
+## Tech I used
 
-Pragati features a **Minimalist Monochrome** visual language:
-- **Palette**: Pristine white and slate tones with subtle translucent panels (`backdrop-blur`, `border-slate-200`).
-- **Typography**:
-  - **Headings**: Plus Jakarta Sans (bold, modern, tracking-tight).
-  - **Body**: Inter (high-legibility reading experience).
-  - **Numbers / Telemetry**: JetBrains Mono (precision exam countdown & timer).
-- **Strict Iconography**: 100% **Lucide React** vector icons. **Zero emojis** anywhere in UI copy, buttons, badges, or headers.
-- **KaTeX Typesetting**: Publication-quality math fonts loaded globally.
-- **Fixed Navigation**: Minimalist 3-item sidebar:
-  1. `AI Instructor` (Interactive tutoring)
-  2. `Quizzes` (Assessment arena)
-  3. `Analytics` (Performance telemetry)
+| Part | What it does | Built with |
+| :--- | :--- | :--- |
+| Frontend | The app you see and use | React 18, TypeScript, Vite, Tailwind CSS |
+| Backend | The brain that handles all requests | Supabase Edge Function (Deno) |
+| Database | Stores your quizzes, answers, progress | Supabase PostgreSQL |
+| Login | Google sign-in and email magic links | Supabase Auth |
+| AI | The teacher and quiz generator | Groq (fast AI inference) |
+| Hosting | Where the app lives | Firebase Hosting |
+| Math rendering | Pretty equations | KaTeX |
+| Charts | Analytics graphs | Recharts |
 
 ---
 
-## Security & Production Hardening
+## How I kept it secure
 
-- **User Data Isolation**: Every database interaction runs through Supabase Row-Level Security (RLS) policies scoped to `auth.uid()` — 20+ owner-only policies across 7 tables, with a dedicated read-only policy set that neuters the public demo account.
-- **Multi-Tier Per-User Rate Limiting** (authenticated middleware runs *before* limiters, so limits key on `user_id` with IP fallback):
-  - Global API limiter: `120 req/min`
-  - AI Chat endpoint: `20 req/min` (safeguards Groq free-tier quotas)
-  - Vision OCR upload: `8 req/min`
-  - Quiz & Analytics endpoints: `80 req/min`
-- **Payload Boundaries**: 6 MB global JSON cap (sized above the 5 MB image-upload parser so vision uploads never hit a premature 413), preventing memory-exhaustion DoS.
-- **Answer-Key Protection**: Correct answers and explanations are stripped server-side from question payloads delivered to the browser.
-- **Security Headers**: `helmet()` enabled; strict CORS allowlist (localhost + configured production origins + Vercel previews).
-- **Input Validation**: Zod schemas on every agent tool; chat history sanitizer caps turns and strips client-controlled fields; message size capped at 5,000 chars.
-- **Automatic Profile Provisioning**: A `SECURITY DEFINER` trigger creates a `user_profiles` row for every new auth user, so Elo ratings persist correctly from the first attempt (includes a backfill for pre-existing users).
-- **Zero Key Leakage**: Sensitive credentials (`GROQ_API_KEY`, Supabase keys) reside solely on the backend. Only the public anon key is delivered to the browser.
-- **Graceful Degradation**: Quiz submission persists the attempt even if telemetry or rating updates fail, surfacing warnings instead of triggering duplicate submissions.
+A few things I took care of (in plain words):
+
+- **Your data is yours only.** Every table in the database has Row Level Security, so one user can never see another user's data — not even by writing their own API calls.
+- **No secret keys in the browser.** The AI key and database keys live only on the backend. Only the public key (which is meant to be public) reaches the browser.
+- **Rate limiting.** If someone tries to spam the AI with hundreds of requests, the backend slows them down. This also protects the free-tier AI quota.
+- **No cheating in quizzes.** Correct answers and explanations are stripped out on the server before questions are sent to the browser.
+- **Size limits on uploads.** So nobody can crash the server with a giant file.
+- **Safe inputs.** Everything the user sends is checked and cleaned before use.
 
 ---
 
-## Getting Started
+## Run it on your machine
 
-### Prerequisites
-- **Node.js**: v18.0.0 or higher
-- **npm** or **pnpm**
-- **Supabase Account**: [supabase.com](https://supabase.com) (free project)
-- **Groq API Key**: [console.groq.com](https://console.groq.com/keys)
+### What you need first
 
-### Environment Setup
+- **Node.js** version 18 or above — download from [nodejs.org](https://nodejs.org/)
+- A free **Supabase** account — [supabase.com](https://supabase.com/)
+- A free **Groq** API key — [console.groq.com/keys](https://console.groq.com/keys)
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/aadisthunder/pragati.git
-   cd pragati
-   ```
-
-2. **Configure Backend Environment**:
-   ```bash
-   cp server/.env.example server/.env
-   ```
-   Edit `server/.env` and fill in your keys:
-   ```env
-   PORT=5000
-   NODE_ENV=development
-   SUPABASE_URL=https://<your-project>.supabase.co
-   SUPABASE_ANON_KEY=<your-supabase-anon-key>
-   GROQ_API_KEY=gsk_<your-groq-api-key>
-   ```
-
-3. **Configure Frontend Environment**:
-   ```bash
-   cp client/.env.example client/.env
-   ```
-   Edit `client/.env`:
-   ```env
-   VITE_SUPABASE_URL=https://<your-project>.supabase.co
-   VITE_SUPABASE_ANON_KEY=<your-supabase-anon-key>
-   VITE_API_URL=   # leave empty in local dev (Vite proxies /api to localhost:5000)
-   ```
-
-4. **Set up the database schema**:
-   Run the SQL in [`supabase/schema.sql`](supabase/schema.sql) in your Supabase project's SQL editor (tables, RLS policies, and the profile-creation trigger).
-
-### Local Development
-
-1. **Install dependencies**:
-   ```bash
-   npm run install:all
-   ```
-
-2. **Start Development Servers**:
-   ```bash
-   # Terminal 1: Start Backend (Express on http://localhost:5000)
-   cd server && npm run dev
-
-   # Terminal 2: Start Frontend (Vite on http://localhost:5173)
-   cd client && npm run dev
-   ```
-
-3. Open `http://localhost:5173` in your browser.
-
-### Testing
-
-Both frontend and backend use **Vitest**. The suites cover the pure-logic layer where regressions hurt most — LaTeX/math rendering, quiz navigation state, theming utilities, agent tool-argument sanitization, quiz JSON repair, and server boot:
+### Step 1: Get the code
 
 ```bash
-# Run server tests (LaTeX normalizer, agent tool sanitizers, quiz JSON repair, server bootstrap)
-cd server && npm test
+git clone https://github.com/aadisthunder/pragati.git
+cd pragati
+```
 
-# Run client tests (LaTeX normalizer, markdown card styling, quiz navigation, theme tokens)
-cd client && npm test
+### Step 2: Set up the backend environment
 
-# Or everything from the root
+Copy the sample file and fill in your keys:
+
+```bash
+cp server/.env.example server/.env
+```
+
+Now open `server/.env` and put in your own values:
+
+```env
+PORT=5000
+NODE_ENV=development
+SUPABASE_URL=https://<your-project>.supabase.co
+SUPABASE_ANON_KEY=<your-supabase-anon-key>
+GROQ_API_KEY=gsk_<your-groq-api-key>
+```
+
+You will find the Supabase URL and anon key in your Supabase dashboard under **Project Settings → API**.
+
+### Step 3: Set up the frontend environment
+
+```bash
+cp client/.env.example client/.env
+```
+
+Then fill in `client/.env`:
+
+```env
+VITE_SUPABASE_URL=https://<your-project>.supabase.co
+VITE_SUPABASE_ANON_KEY=<your-supabase-anon-key>
+VITE_API_URL=
+```
+
+Leave `VITE_API_URL` empty — in local development the app automatically sends API calls to your local backend.
+
+### Step 4: Create the database tables
+
+Open your Supabase dashboard, go to the **SQL Editor**, paste the contents of [`supabase/schema.sql`](supabase/schema.sql) from this repo, and run it. This creates all the tables, security rules, and triggers in one go.
+
+### Step 5: Install and run
+
+```bash
+# install everything (frontend + backend)
+npm run install:all
+
+# terminal 1 — start the backend
+npm run dev:server
+
+# terminal 2 — start the frontend
+npm run dev:client
+```
+
+Now open [http://localhost:5173](http://localhost:5173) in your browser. That's it! 🎉
+
+---
+
+## Running the tests
+
+The project has tests for the tricky parts — math rendering, quiz logic, AI input cleaning, and more:
+
+```bash
 npm test
 ```
 
-To verify production builds:
+Or run them separately:
+
+```bash
+cd server && npm test   # backend tests
+cd client && npm test   # frontend tests
+```
+
+To check that a production build works:
+
 ```bash
 npm run build
 ```
 
 ---
 
-## Deployment Guide
+## How to deploy it
 
-### Production Setup (Firebase + Supabase)
+This app has two parts that get deployed separately: the **frontend** on Firebase, and the **backend** as a Supabase Edge Function. Both have free tiers.
 
-#### 1. Frontend on Firebase Hosting (`pragati-aadi`)
-1. Build the production bundle:
-   ```bash
-   cd client && npm run build
-   ```
-2. Deploy to Firebase:
-   ```bash
-   npx firebase-tools deploy --only hosting --project pragati-aadi
-   ```
-   Live at: `https://pragati-aadi.web.app`
+### Part 1: Frontend on Firebase Hosting
 
-#### 2. Backend on Supabase Edge Runtime
-- The backend API is deployed as a secure Supabase Edge Function (`supabase/functions/api/index.ts`).
-- All database queries, telemetry tracking, and AI tutoring requests are routed through the backend proxy with Supabase JWT authentication and Row Level Security (RLS).
+1. Make a Firebase project at [console.firebase.google.com](https://console.firebase.google.com/) and note the project ID.
+2. Log in and deploy:
 
-### Alternative Deployment Options
+```bash
+firebase login
+npm run build:client
+firebase deploy --only hosting --project <your-firebase-project-id>
+```
 
-#### Frontend (Vercel)
-1. Import the repository in [Vercel](https://vercel.com).
-2. Set **Root Directory** to `client`.
-3. Framework Preset: **Vite**.
-4. Configure Environment Variables:
-   - `VITE_SUPABASE_URL`: `https://<your-project>.supabase.co`
-   - `VITE_SUPABASE_ANON_KEY`: `<your-supabase-anon-key>`
-   - `VITE_API_URL`: `https://<your-backend-host>`
-5. Deploy.
+3. Before building, set your backend URL in `client/.env.production`:
 
-#### Backend (Render or Railway)
-1. Create a new **Web Service** on [Render](https://render.com) or [Railway](https://railway.app).
-2. Set **Root Directory** to `server`.
-3. Build Command: `npm run build`
-4. Start Command: `npm start` (executes `node dist/server.js`)
-5. Configure Environment Variables:
-   - `PORT`: `5000`
-   - `NODE_ENV`: `production`
-   - `SUPABASE_URL`: `https://<your-project>.supabase.co`
-   - `SUPABASE_ANON_KEY`: `<your-supabase-anon-key>`
-   - `GROQ_API_KEY`: `<your-groq-api-key>`
-   - `CLIENT_URL` / `CORS_ORIGIN`: `https://pragati-aadi.web.app`
+```env
+VITE_API_URL=https://<your-project>.supabase.co/functions/v1/api
+```
 
-### Supabase URL Configuration
-In your Supabase project dashboard under **Authentication -> URL Configuration**:
-- **Site URL**: `https://pragati-aadi.web.app`
-- **Redirect URLs**: Add `https://pragati-aadi.web.app/**`
+This is important — without it the deployed site will look for the backend on your own computer.
+
+### Part 2: Backend as a Supabase Edge Function
+
+The backend code lives in `supabase/functions/api/`. Deploy it like this:
+
+```bash
+npm install -g supabase
+supabase login
+supabase functions deploy api --project-ref <your-supabase-project-ref>
+
+# give the function its secret keys
+supabase secrets set GROQ_API_KEY=gsk_your_key_here --project-ref <your-supabase-project-ref>
+```
+
+### Part 3: The Supabase login settings (do not skip!)
+
+This one bit me during deployment, so learn from my mistake 🙂 — if you skip it, Google sign-in will silently redirect you to `localhost` instead of your live site.
+
+In your Supabase dashboard, go to **Authentication → URL Configuration** and set:
+
+- **Site URL**: `https://<your-firebase-project>.web.app`
+- **Redirect URLs**: add `https://<your-firebase-project>.web.app/**` (you can also keep `http://localhost:5173/**` for local development)
+
+If your `redirectTo` URL is not in this list, Supabase quietly falls back to the Site URL — that is why the Site URL must be your live address, not localhost.
+
+### Part 4 (optional): Putting the backend on Render or Railway instead
+
+If you prefer a normal Node.js server instead of an Edge Function, the `server/` folder is a standard Express app:
+
+1. Create a new Web Service on [Render](https://render.com) or [Railway](https://railway.app).
+2. Root directory: `server`, build command: `npm run build`, start command: `npm start`.
+3. Add these environment variables: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `GROQ_API_KEY`, and `CLIENT_URL` / `CORS_ORIGIN` set to your frontend URL.
+4. Then set `VITE_API_URL` to your Render/Railway URL and rebuild the frontend.
 
 ---
 
-## Hackathon Demo Access
+## For judges and recruiters
 
-For hackathon judges and evaluators, Pragati includes a **One-Click Demo Access** feature:
-- Navigate to the `/login` page.
-- Click **"Instant Judge Login"**.
-- You will be authenticated immediately with pre-loaded telemetry data, quiz history, and analytics.
+If you are evaluating this project (thank you!), there is no need to sign up:
 
-The demo account is **read-only by database policy** (RLS blocks it from inserting or deleting any data), so exploring it can never pollute real student data.
+1. Open [https://pragati-aadi.web.app](https://pragati-aadi.web.app)
+2. On the login page, click **"Instant Judge Login"**
+
+You will be logged in immediately with pre-loaded quiz history, telemetry data, and analytics — so you can see the full experience without an OTP or Google account. This account is **read-only** (protected by database rules), so exploring it can never spoil real student data.
 
 ---
 
 ## License
 
-This project is open source and available under the [MIT License](LICENSE).
+This project is open source under the [MIT License](LICENSE). Feel free to learn from it, fork it, and build your own thing. If it helped you, a star on the repo would make my day. ⭐
