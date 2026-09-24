@@ -83,6 +83,7 @@ test_*.jpg
 
 # Agent tooling / local scratch
 .freebuff/
+.agents/
 
 # Dev server logs
 client-dev.log
