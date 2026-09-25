@@ -89,3 +89,12 @@ test_*.jpg
 client-dev.log
 server-dev.log
 *.log.bak
+
+# Playwright test reports & traces
+playwright-report/
+blob-report/
+test-results/
+
+# Agent & IDE scratch
+.gemini/
+

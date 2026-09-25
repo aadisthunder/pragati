@@ -25,7 +25,13 @@ do $$
 declare
   demo_user_id uuid;
 begin
-  -- Create or fetch the demo user.
+  -- Create or fetch the demo user. auth.users has no DB-level unique
+  -- constraint on email on all Supabase projects, so ON CONFLICT (email) can
+  -- fail there — select-then-insert instead (the script runs sequentially,
+  -- so no race is possible within one execution).
+  select id into demo_user_id from auth.users where email = 'judge.demo@pragati.app';
+
+  if demo_user_id is null then
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
     email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
@@ -44,11 +50,7 @@ begin
     '{"full_name":"Judge Demo"}'::jsonb,
     now(), now(), '', '', '', ''
   )
-  on conflict (email) do nothing
   returning id into demo_user_id;
-
-  if demo_user_id is null then
-    select id into demo_user_id from auth.users where email = 'judge.demo@pragati.app';
   end if;
 
   -- Identity row (Supabase GoTrue convention for password identities).
@@ -173,7 +175,7 @@ begin
 
   -- Map questions to concepts (explicit pre-mapping: no live LLM tagging needed).
   insert into public.question_concepts (question_id, concept_id, weight)
-  select q.id, c.id, 1.0
+  select qs.id, c.id, 1.0
   from (values
     ('11111111-1111-1111-1111-111111111101', 'functions'),
     ('11111111-1111-1111-1111-111111111102', 'limits'),
@@ -182,7 +184,7 @@ begin
     ('11111111-1111-1111-1111-111111111105', 'derivative_application'),
     ('11111111-1111-1111-1111-111111111105', 'power_rule')
   ) as qm(question_id, concept_slug)
-  join public.questions qs on qs.id = qm.question_id
+  join public.questions qs on qs.id = qm.question_id::uuid
   join public.concepts  c  on c.slug = qm.concept_slug and c.topic = 'Calculus'
   on conflict do nothing;
 

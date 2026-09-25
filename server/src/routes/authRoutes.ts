@@ -17,8 +17,11 @@ authRouter.get('/me', async (req: AuthenticatedRequest, res: Response): Promise<
       .maybeSingle();
 
     // Onboarding is complete when the flag is stamped OR the account already
-    // has goals (legacy users get no popup). The read-only demo account can
-    // never persist the flag, so it always reports incomplete.
+    // has goals (legacy users get no popup). Demo logins always report
+    // incomplete so the popup appears on every fresh load — and the read-only
+    // demo additionally can never persist the flag at all.
+    const DEMO_LOGIN_EMAILS = new Set(['judge.pragati@gmail.com', 'judge.demo@pragati.app']);
+    const isDemoLogin = DEMO_LOGIN_EMAILS.has(req.user!.email || '');
     const { count: goalCount } = await scopedClient
       .from('learning_goals')
       .select('id', { count: 'exact', head: true });
@@ -31,8 +34,8 @@ authRouter.get('/me', async (req: AuthenticatedRequest, res: Response): Promise<
         skill_rating: profile?.skill_rating || 1200,
         streak_days: profile?.streak_days || 0,
         avatar_url: profile?.avatar_url,
-        onboarding_completed: Boolean(profile?.onboarding_completed_at || (goalCount ?? 0) > 0),
-        is_readonly_demo: req.user!.email === 'judge.pragati@gmail.com',
+        onboarding_completed: !isDemoLogin && Boolean(profile?.onboarding_completed_at || (goalCount ?? 0) > 0),
+        is_readonly_demo: isDemoLogin,
       },
     });
   } catch (err: any) {

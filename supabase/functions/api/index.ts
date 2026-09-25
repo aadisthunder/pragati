@@ -166,8 +166,10 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
 
       // Onboarding is complete when the flag is stamped OR the account
-      // already has goals (legacy users get no popup). The read-only demo
-      // can never persist the flag, so it always reports incomplete.
+      // already has goals (legacy users get no popup). Demo logins always
+      // report incomplete so the popup appears on every fresh load — and the
+      // read-only demo additionally can never persist the flag at all.
+      const isDemoLogin = DEMO_LOGIN_EMAILS.has(user.email || '');
       const { count: goalCount } = await supabase
         .from('learning_goals')
         .select('id', { count: 'exact', head: true });
@@ -180,8 +182,8 @@ Deno.serve(async (req: Request) => {
           skill_rating: profile?.skill_rating || 1200,
           streak_days: profile?.streak_days || 0,
           avatar_url: profile?.avatar_url,
-          onboarding_completed: Boolean(profile?.onboarding_completed_at || (goalCount ?? 0) > 0),
-          is_readonly_demo: user.email === 'judge.pragati@gmail.com',
+          onboarding_completed: !isDemoLogin && Boolean(profile?.onboarding_completed_at || (goalCount ?? 0) > 0),
+          is_readonly_demo: isDemoLogin,
         },
       });
     }
@@ -196,7 +198,9 @@ Deno.serve(async (req: Request) => {
         .order('created_at', { ascending: false });
 
       if (error) return errorResponse(error.message, 500);
-      return jsonResponse({ quizzes: quizzes || [] });
+      return jsonResponse({
+        quizzes: (quizzes || []).map((q: any) => ({ ...q, is_mine: q.created_by === userId })),
+      });
     }
 
     // Single Quiz: /quizzes/:id
@@ -1416,6 +1420,8 @@ Deno.serve(async (req: Request) => {
 // ============================================================================
 
 const READONLY_DEMO_EMAIL = 'judge.pragati@gmail.com';
+/** Demo logins intentionally re-show the first-login popup on every load. */
+const DEMO_LOGIN_EMAILS = new Set(['judge.pragati@gmail.com', 'judge.demo@pragati.app']);
 
 /**
  * Loads the user's goals with subtopics and derives mastery from

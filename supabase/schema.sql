@@ -44,6 +44,11 @@ create table if not exists public.quizzes (
   created_at timestamptz not null default now()
 );
 
+-- Healing for installs that ran the (since-removed) public-visibility experiment:
+-- quizzes are strictly PRIVATE per candidate.
+alter table public.quizzes drop column if exists visibility;
+drop index if exists idx_quizzes_visibility;
+
 create table if not exists public.questions (
   id uuid primary key default gen_random_uuid(),
   quiz_id uuid not null references public.quizzes (id) on delete cascade,
@@ -267,11 +272,56 @@ alter table public.learning_events           enable row level security;
 -- ONLY because these RLS policies scope every read to auth.uid(). Do not loosen them.
 -- learner_concept_state / learning_events follow the same owner-only model.
 
+-- Re-run guard: CREATE POLICY has no IF NOT EXISTS, so drop any policies we
+-- are about to create. Safe: every drop below is immediately followed by the
+-- canonical create in this file.
+drop policy if exists "profiles_select_own"            on public.user_profiles;
+drop policy if exists "profiles_update_own"            on public.user_profiles;
+drop policy if exists "quizzes_select_own"             on public.quizzes;
+drop policy if exists "quizzes_insert_own"             on public.quizzes;
+drop policy if exists "quizzes_delete_own"             on public.quizzes;
+drop policy if exists "quizzes_update_own"             on public.quizzes;
+drop policy if exists "quizzes_select_public"          on public.quizzes;
+drop policy if exists "questions_select_public"        on public.questions;
+drop policy if exists "questions_select_public_safe"   on public.questions;
+drop policy if exists "questions_select_own"           on public.questions;
+drop policy if exists "questions_insert_own"           on public.questions;
+drop policy if exists "questions_delete_own"           on public.questions;
+drop policy if exists "attempts_select_own"            on public.quiz_attempts;
+drop policy if exists "attempts_insert_own"            on public.quiz_attempts;
+drop policy if exists "telemetry_select_own"           on public.question_telemetry;
+drop policy if exists "telemetry_insert_own"           on public.question_telemetry;
+drop policy if exists "telemetry_delete_own"           on public.question_telemetry;
+drop policy if exists "chat_select_own"                on public.chat_sessions;
+drop policy if exists "chat_insert_own"                on public.chat_sessions;
+drop policy if exists "chat_delete_own"                on public.chat_sessions;
+drop policy if exists "chat_msg_select_own"            on public.chat_messages;
+drop policy if exists "chat_msg_insert_own"            on public.chat_messages;
+drop policy if exists "chat_msg_delete_own"            on public.chat_messages;
+drop policy if exists "concepts_select_all"            on public.concepts;
+drop policy if exists "concept_prereqs_select_all"     on public.concept_prerequisites;
+drop policy if exists "question_concepts_select_own"   on public.question_concepts;
+drop policy if exists "learner_state_select_own"       on public.learner_concept_state;
+drop policy if exists "learner_state_insert_own"       on public.learner_concept_state;
+drop policy if exists "learner_state_update_own"       on public.learner_concept_state;
+drop policy if exists "learning_events_select_own"     on public.learning_events;
+drop policy if exists "learning_events_insert_own"     on public.learning_events;
+drop policy if exists "goals_select_own"               on public.learning_goals;
+drop policy if exists "goals_insert_own"               on public.learning_goals;
+drop policy if exists "goals_update_own"               on public.learning_goals;
+drop policy if exists "goals_delete_own"               on public.learning_goals;
+drop policy if exists "goal_subtopics_select_own"      on public.goal_subtopics;
+drop policy if exists "goal_subtopics_insert_own"      on public.goal_subtopics;
+drop policy if exists "goal_subtopics_update_own"      on public.goal_subtopics;
+drop policy if exists "goal_subtopics_delete_own"      on public.goal_subtopics;
+drop policy if exists "demo_readonly_profile_update"   on public.user_profiles;
+
 -- Owner-only access to everything
 create policy "profiles_select_own"    on public.user_profiles      for select using (auth.uid() = id);
 create policy "profiles_update_own"    on public.user_profiles      for update using (auth.uid() = id);
 -- Quizzes are generated per-user by the AI agent, so ownership-scoped reads keep
 -- one student from enumerating another student's quizzes (and answer keys).
+-- Quizzes are strictly PRIVATE per candidate — no public sharing.
 create policy "quizzes_select_own"     on public.quizzes            for select using (auth.uid() = created_by);
 create policy "quizzes_insert_own"     on public.quizzes            for insert with check (auth.uid() = created_by);
 create policy "quizzes_delete_own"     on public.quizzes            for delete using (auth.uid() = created_by);
@@ -346,10 +396,17 @@ create policy "goal_subtopics_delete_own"  on public.goal_subtopics for delete u
 --
 -- Replace the email lookup with the actual demo user's id if preferred.
 
+-- SECURITY DEFINER is required here (same pattern as handle_new_user above):
+-- the function reads auth.users, which the authenticated role cannot query
+-- directly. As an invoker function, ANY statement whose RLS plan evaluates
+-- one of the demo_readonly_* policies below fails with "permission denied
+-- for table users" — not just for the demo account, but for every user.
 create or replace function public.is_demo_account()
 returns boolean
 language sql
 stable
+security definer
+set search_path = public
 as $$
   select exists (
     select 1 from auth.users

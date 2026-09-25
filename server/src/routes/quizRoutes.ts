@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/authMiddleware.js';
 import { createScopedClient } from '../config/supabase.js';
 import { calculateAttemptSummary, calculateUpdatedRating } from '../services/analyticsService.js';
+import { runAdaptiveSubmitLoop } from '../services/adaptiveSubmit.js';
 
 export function sanitizeQuestionsForStudent(questions: any[]) {
   return questions.map(q => {
@@ -12,9 +13,10 @@ export function sanitizeQuestionsForStudent(questions: any[]) {
 
 export const quizRouter = Router();
 
-// GET /api/quizzes - List all available quizzes
+// GET /api/quizzes - List the candidate's own quizzes (strictly private per candidate)
 quizRouter.get('/', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const scopedClient = createScopedClient(req.token!);
+  const userId = req.user!.id;
   try {
     const { data: quizzes, error } = await scopedClient
       .from('quizzes')
@@ -26,7 +28,13 @@ quizRouter.get('/', async (req: AuthenticatedRequest, res: Response): Promise<vo
       return;
     }
 
-    res.json({ quizzes: quizzes || [] });
+    res.json({
+      quizzes: (quizzes || []).map((q: any) => ({
+        ...q,
+        // Tells the client whether to show owner controls (3-dot menu).
+        is_mine: q.created_by === userId,
+      })),
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -163,6 +171,15 @@ quizRouter.post('/:id/submit', async (req: AuthenticatedRequest, res: Response):
     if (telemetryError) {
       console.error('Question telemetry insert failed:', telemetryError.message);
       warnings.push(`Attempt saved but per-question telemetry could not be stored: ${telemetryError.message}`);
+    }
+
+    // 5.5 Adaptive learner model: convert quiz evidence into concept mastery
+    // (mirror of the Edge Function's runAdaptiveLoop). Must never fail the
+    // submit — the attempt is already persisted above.
+    try {
+      await runAdaptiveSubmitLoop(scopedClient, userId, quizId, evaluatedTelemetry, attempt.id);
+    } catch (adaptErr: any) {
+      console.error('Adaptive submit loop failed (non-fatal):', adaptErr?.message || adaptErr);
     }
 
     // 6. Update user's rating in user_profiles
