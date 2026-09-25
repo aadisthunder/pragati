@@ -84,6 +84,7 @@ The harness covers the cases that matter: hidden prerequisite failures, hint-rel
 ## What else is in the box
 
 - **Socratic AI tutor** — guides with questions instead of dumping answers; streams live; handles LaTeX math and photos of handwritten problems (OCR).
+- **Goal-driven learning memory** — on first login Pragati asks what you want to master, generates a subtopic plan, and remembers it: the tutor weaves your goals into every chat (and offers a test when the conversation touches one), while the Topics page tracks a live mastery percentage per topic and subtopic from real quiz evidence.
 - **Quiz arena** — AI-generated quizzes on any topic, hints during the test, question palette, per-question telemetry captured client-side.
 - **Anti-cheating by design** — correct answers and explanations are stripped on the server before questions reach the browser.
 - **Analytics** — concept mastery map, topic breakdowns, accuracy progression curve, Elo-style skill rating, due-review counts.

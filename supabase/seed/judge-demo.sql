@@ -192,4 +192,27 @@ begin
   insert into public.user_profiles (id, email, full_name)
   values (demo_user_id, 'judge.demo@pragati.app', 'Judge Demo')
   on conflict (id) do nothing;
+
+  -- ---------------------------------------------------------------------------
+  -- 7. Learning goal (persistent AI memory) mirroring the seeded learner state.
+  --    Subtopics map to the same Calculus concepts, so the goal's mastery bar
+  --    moves as the demo quiz is taken. onboarding_completed_at stays NULL so
+  --    the first-login popup appears for the demo (intentional for judges).
+  -- ---------------------------------------------------------------------------
+  insert into public.learning_goals (user_id, title, slug, source)
+  values (demo_user_id, 'Calculus', 'calculus', 'onboarding')
+  on conflict (user_id, slug) do nothing;
+
+  insert into public.goal_subtopics (goal_id, user_id, name, slug, order_index)
+  select g.id, demo_user_id, v.name, v.slug, v.ord
+  from public.learning_goals g
+  cross join (values
+    ('Functions', 'functions', 0),
+    ('Limits', 'limits', 1),
+    ('Power Rule', 'power_rule', 2),
+    ('Chain Rule', 'chain_rule', 3),
+    ('Derivative Application', 'derivative_application', 4)
+  ) as v(name, slug, ord)
+  where g.user_id = demo_user_id and g.slug = 'calculus'
+  on conflict (goal_id, slug) do nothing;
 end $$;

@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { NavLink, Outlet, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { Bot, CheckSquare, BarChart3, LogOut, Award, Plus, MessageSquare, Trash2, Menu, X, SquarePen } from 'lucide-react';
+import { Bot, CheckSquare, BarChart3, LogOut, Award, Plus, MessageSquare, Trash2, Menu, X, SquarePen, Target, Settings2, BookOpen } from 'lucide-react';
 import {
   getSidebarNavItemClass,
   getSecondaryBadgeClass,
@@ -13,9 +13,19 @@ import {
   handleModalBackdropClick,
 } from '../../utils/theme';
 import { apiRequest, apiRequestCached, invalidateCache, getFromCache } from '../../api/client';
+import { OnboardingGoalModal } from '../onboarding/OnboardingGoalModal';
+import {
+  fetchGoals,
+  refreshGoals,
+  getGoalsFromCache,
+  GOALS_UPDATED_EVENT,
+  saveDemoGoalsSession,
+  getDemoGoalsSession,
+  type GoalWithMastery,
+} from '../../api/goals';
 
 export const AppShell: React.FC = () => {
-  const { profile, user, signOut } = useAuth();
+  const { profile, user, signOut, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -24,6 +34,11 @@ export const AppShell: React.FC = () => {
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [sessionToDelete, setSessionToDelete] = useState<{ id: string; title: string } | null>(null);
   const [deletingSession, setDeletingSession] = useState(false);
+
+  // Learning goals (persistent AI memory) + first-login onboarding popup
+  const [goals, setGoals] = useState<GoalWithMastery[]>(() => getGoalsFromCache());
+  const [goalsLoading, setGoalsLoading] = useState(() => !getFromCache('/api/goals'));
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const [sessions, setSessions] = useState<Array<{ id: string; title: string }>>(() => {
     const cached = getFromCache<{ sessions: Array<{ id: string; title: string }> }>('/api/instructor/sessions');
@@ -46,6 +61,46 @@ export const AppShell: React.FC = () => {
     window.addEventListener('chat_sessions_updated', handleUpdated);
     return () => window.removeEventListener('chat_sessions_updated', handleUpdated);
   }, [fetchSessions, location.pathname, location.search]);
+
+  // Load goals once, then refresh whenever anything updates them
+  // (onboarding modal, Topics page edits, quiz-driven mastery changes).
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const data = await fetchGoals();
+        if (!cancelled) setGoals(data);
+      } catch {
+        // Sidebar topics are non-critical; leave cached/empty state
+      } finally {
+        if (!cancelled) setGoalsLoading(false);
+      }
+    };
+    load();
+    const handleGoalsUpdated = () => {
+      refreshGoals()
+        .then((data) => !cancelled && setGoals(data))
+        .catch(() => {});
+    };
+    window.addEventListener(GOALS_UPDATED_EVENT, handleGoalsUpdated);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(GOALS_UPDATED_EVENT, handleGoalsUpdated);
+    };
+  }, []);
+
+  // First-login popup: show when the server reports onboarding incomplete.
+  // The read-only demo account can never persist the flag, so this fires on
+  // every fresh load for that account — intentional (judge experience). The
+  // once-per-mount guard prevents a profile refresh from re-opening the popup
+  // right after the user closes it.
+  const onboardingAutoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (!onboardingAutoOpenedRef.current && profile && profile.onboarding_completed === false) {
+      onboardingAutoOpenedRef.current = true;
+      setShowOnboarding(true);
+    }
+  }, [profile]);
 
   // Background preloading of sidebar page data & chunks sequentially
   useEffect(() => {
@@ -143,14 +198,47 @@ export const AppShell: React.FC = () => {
     navigate('/login');
   };
 
+  const handleOnboardingClose = async (submitted: boolean) => {
+    setShowOnboarding(false);
+    if (submitted) {
+      // Refresh profile so the flag (now stamped) keeps the popup closed,
+      // and pull the fresh goals into the sidebar.
+      try {
+        const data = await refreshGoals();
+        setGoals(data);
+      } catch {
+        // non-critical
+      }
+      refreshProfile().catch(() => {});
+    }
+  };
+
+  const handleGoalsCreated = (createdGoals: Array<{ id: string; title: string; masteryPct: number }>) => {
+    // Read-only demo: persist the goals to sessionStorage so chat carries
+    // goal memory for this session even though the DB writes are blocked.
+    if (profile?.is_readonly_demo) {
+      saveDemoGoalsSession(createdGoals.map((g) => ({ goalId: g.id, title: g.title, masteryPct: g.masteryPct, subtopics: [] })));
+    }
+  };
+
   const navItems = [
     { to: '/instructor', label: 'AI Instructor', icon: Bot },
     { to: '/quizzes', label: 'Quizzes', icon: CheckSquare },
     { to: '/analytics', label: 'Analytics', icon: BarChart3 },
   ];
 
+  // Read-only demo fallback: session-stored goals when DB goals are blocked.
+  const demoSessionGoals = profile?.is_readonly_demo ? getDemoGoalsSession() : [];
+  const displayGoals: GoalWithMastery[] =
+    goals.length > 0
+      ? goals
+      : demoSessionGoals.map((g) => ({ goalId: g.id, title: g.title, masteryPct: g.masteryPct, subtopics: [] }));
+
   return (
     <div className="flex h-screen bg-white text-slate-900 overflow-hidden font-sans">
+      {/* First-login onboarding popup (also fires every load for the read-only demo) */}
+      <OnboardingGoalModal open={showOnboarding} onClose={handleOnboardingClose} onGoalsCreated={handleGoalsCreated} />
+
       {/* Mobile Backdrop Overlay */}
       <div
         onClick={() => setIsMobileDrawerOpen(false)}
@@ -259,6 +347,79 @@ export const AppShell: React.FC = () => {
                 );
               })}
             </nav>
+
+            {/* My Topics: persistent AI memory of what the user wants to master */}
+            <div className="mt-5 pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-between pl-1 pr-0.5 mb-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-display flex items-center gap-1.5">
+                  <Target className="w-3 h-3" />
+                  My Topics
+                </span>
+                <NavLink
+                  to="/topics"
+                  onClick={() => setIsMobileDrawerOpen(false)}
+                  className={({ isActive }) =>
+                    `p-1.5 rounded-lg transition-colors cursor-pointer ${
+                      isActive
+                        ? 'text-slate-900 bg-slate-100'
+                        : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'
+                    }`
+                  }
+                  title="Manage topics"
+                  aria-label="Manage topics"
+                >
+                  <Settings2 className="w-3.5 h-3.5" />
+                </NavLink>
+              </div>
+
+              {goalsLoading ? (
+                <div className="pl-1 pr-2 py-1.5 flex items-center gap-2">
+                  <div className="h-2.5 w-full max-w-[140px] rounded-full bg-slate-100 animate-pulse" />
+                </div>
+              ) : displayGoals.length === 0 ? (
+                <NavLink
+                  to="/topics"
+                  onClick={() => setIsMobileDrawerOpen(false)}
+                  className="mx-0.5 flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  <BookOpen className="w-3.5 h-3.5 shrink-0" />
+                  <span>Add a topic to master</span>
+                </NavLink>
+              ) : (
+                <div className="space-y-0.5">
+                  {displayGoals.map((goal) => {
+                    const isTopicsActive = location.pathname === '/topics';
+                    return (
+                      <NavLink
+                        key={goal.goalId}
+                        to="/topics"
+                        onClick={() => setIsMobileDrawerOpen(false)}
+                        title={`${goal.title} — ${goal.masteryPct}% mastered`}
+                        className={`block px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                          isTopicsActive
+                            ? 'bg-slate-50 text-slate-900'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-medium truncate min-w-0">{goal.title}</span>
+                          <span className="text-[10px] font-mono font-semibold text-slate-400 shrink-0">
+                            {goal.masteryPct}%
+                          </span>
+                        </div>
+                        {/* Mini mastery progress bar */}
+                        <div className="mt-1.5 h-1 w-full rounded-full bg-slate-100 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-slate-800 transition-all duration-500"
+                            style={{ width: `${Math.max(2, Math.min(100, goal.masteryPct))}%` }}
+                          />
+                        </div>
+                      </NavLink>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* User Card & Rating */}

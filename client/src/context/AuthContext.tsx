@@ -10,6 +10,10 @@ export interface UserProfile {
   skill_rating: number;
   streak_days: number;
   avatar_url?: string;
+  /** First-login "what do you want to master?" popup flag (server-derived). */
+  onboarding_completed?: boolean;
+  /** Read-only judge demo: popup intentionally reappears on every fresh load. */
+  is_readonly_demo?: boolean;
 }
 
 interface AuthContextType {

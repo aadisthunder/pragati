@@ -20,6 +20,9 @@ const QuizArenaPage = React.lazy(() =>
 const AnalyticsPage = React.lazy(() =>
   import('./pages/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage }))
 );
+const TopicsPage = React.lazy(() =>
+  import('./pages/TopicsPage').then((m) => ({ default: m.TopicsPage }))
+);
 
 const PageLoader: React.FC = () => (
   <div className="flex h-screen w-full items-center justify-center bg-[#FAF8FD]">
@@ -50,6 +53,7 @@ export const App: React.FC = () => {
               <Route path="quizzes" element={<QuizzesPage />} />
               <Route path="quizzes/:id" element={<QuizArenaPage />} />
               <Route path="analytics" element={<AnalyticsPage />} />
+              <Route path="topics" element={<TopicsPage />} />
             </Route>
 
             {/* Catch-all redirect */}
