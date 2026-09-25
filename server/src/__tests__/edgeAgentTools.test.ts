@@ -28,6 +28,8 @@ describe('AGENT_TOOL_SPECS', () => {
         'explain_missed_question',
         'get_student_performance',
         'get_questions_to_review',
+        'get_learning_goals',
+        'check_topic_mastery',
       ])
     );
     for (const spec of AGENT_TOOL_SPECS) {
@@ -40,7 +42,7 @@ describe('AGENT_TOOL_SPECS', () => {
 
   it('constrains generate_quiz difficulty but leaves numeric bounds to sanitizeToolArgs', () => {
     const spec = AGENT_TOOL_SPECS.find((t: any) => t.function.name === 'generate_quiz');
-    expect(spec.function.parameters.properties.difficulty.enum).toEqual(['beginner', 'intermediate', 'advanced']);
+    expect(spec.function.parameters.properties.difficulty.enum).toEqual(['beginner', 'intermediate', 'advanced', 'expert']);
     // Groq validates tool arguments against this schema BEFORE our code runs, so
     // any hard numeric bound becomes a hard API error (tool_use_failed) when the
     // model overshoots. Bounds must live ONLY in sanitizeToolArgs (see
@@ -104,6 +106,14 @@ describe('sanitizeToolArgs', () => {
   it('defaults limits for list tools', () => {
     expect(sanitizeToolArgs('get_student_attempts', {}, 'history').limit).toBe(5);
     expect(sanitizeToolArgs('get_questions_to_review', {}, 'review').limit).toBe(10);
+  });
+
+  it('backfills topic for check_topic_mastery from user message when missing', () => {
+    const args1 = sanitizeToolArgs('check_topic_mastery', {}, 'Test me on my learning goal "DSA".');
+    expect(args1.topic).toBe('DSA');
+
+    const args2 = sanitizeToolArgs('check_topic_mastery', {}, 'Test me on Calculus');
+    expect(args2.topic).toBe('Calculus');
   });
 });
 

@@ -6,9 +6,13 @@ import { loadGoalMastery } from '../services/goalService.js';
 
 export const getLearningGoalsSchema = z.object({});
 
+export const checkTopicMasterySchema = z.object({
+  topic: z.string().describe("The name or title of the learning goal or academic topic to check mastery for (e.g. 'DSA', 'Calculus')."),
+});
+
 export const generateQuizSchema = z.object({
   topic: z.string().min(1, 'Topic is required'),
-  difficulty: z.enum(['beginner', 'intermediate', 'advanced']).nullable().optional().default('intermediate'),
+  difficulty: z.enum(['beginner', 'intermediate', 'advanced', 'expert']).nullable().optional().default('intermediate'),
   num_questions: z.number().min(1).max(10).nullable().optional().default(5),
 });
 
@@ -117,7 +121,8 @@ export function sanitizeToolArgs(toolName: string, rawArgs: any = {}, userMessag
     }
 
     if (!args.difficulty || typeof args.difficulty !== 'string') {
-      args.difficulty = 'intermediate';
+      const diffMatch = userMessage.match(/\b(beginner|intermediate|advanced|expert)\b/i);
+      args.difficulty = diffMatch ? (diffMatch[1].toLowerCase() as any) : 'intermediate';
     }
   } else if (toolName === 'get_student_attempts' || toolName === 'get_student_performance') {
     if (!args.limit || typeof args.limit !== 'number') {
@@ -126,6 +131,13 @@ export function sanitizeToolArgs(toolName: string, rawArgs: any = {}, userMessag
   } else if (toolName === 'get_questions_to_review') {
     if (!args.limit || typeof args.limit !== 'number') {
       args.limit = 10;
+    }
+  } else if (toolName === 'check_topic_mastery') {
+    if (!args.topic || typeof args.topic !== 'string' || !args.topic.trim()) {
+      const topicMatch =
+        userMessage.match(/(?:goal|topic)\s*["':]?\s*([^"'\.\n]+)["']?/i) ||
+        userMessage.match(/on\s+["']?([^"'\.\n]+)["']?/i);
+      args.topic = topicMatch && topicMatch[1] ? topicMatch[1].trim() : '';
     }
   }
 
@@ -509,6 +521,62 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
     }
   );
 
+  const checkTopicMasteryTool = tool(
+    async ({ topic }: { topic: string }) => {
+      try {
+        const goalsData = await loadGoalMastery(supabaseClient, userId);
+        const query = (topic || '').trim().toLowerCase();
+
+        const goal = goalsData.find(
+          (g) =>
+            g.title.toLowerCase().trim() === query ||
+            g.title.toLowerCase().includes(query) ||
+            query.includes(g.title.toLowerCase().trim())
+        );
+
+        if (goal) {
+          const diff = goal.masteryPct < 50 ? 'beginner' : goal.masteryPct < 80 ? 'intermediate' : 'advanced';
+          return JSON.stringify({
+            action: 'TOPIC_MASTERY_RETRIEVED',
+            found: true,
+            topic: goal.title,
+            mastery_pct: goal.masteryPct,
+            recommended_difficulty: diff,
+            subtopics: goal.subtopics.map((s) => ({
+              name: s.name,
+              mastery_pct: s.masteryPct,
+              recommended_difficulty: s.masteryPct < 50 ? 'beginner' : s.masteryPct < 80 ? 'intermediate' : 'advanced',
+            })),
+            instructions:
+              'Present the student with their current mastery percentage and recommended difficulty level. List the available subtopics with their recommended difficulties. Ask the student which subtopic they want to test before calling generate_quiz, and wait for their answer.',
+          });
+        }
+
+        return JSON.stringify({
+          action: 'TOPIC_MASTERY_RETRIEVED',
+          found: false,
+          topic: topic || '',
+          mastery_pct: 0,
+          recommended_difficulty: 'beginner',
+          subtopics: [],
+          available_goals: goalsData.map((g) => g.title),
+          message: `No active learning goal named "${topic}" was found in your tracked goals. Starting at beginner level.`,
+        });
+      } catch (err: any) {
+        return JSON.stringify({
+          action: 'ERROR',
+          error: `Error checking topic mastery: ${err.message}`,
+        });
+      }
+    },
+    {
+      name: 'check_topic_mastery',
+      description:
+        "Checks the student's live mastery percentage and subtopics for a specific academic topic or learning goal (e.g. 'DSA'). Returns current mastery percentage, recommended difficulty level (beginner <50%, intermediate 50-80%, advanced >80%), and all available subtopics with their recommended difficulties.",
+      schema: checkTopicMasterySchema,
+    }
+  );
+
   return [
     generateQuizTool,
     getStudentPerformanceTool,
@@ -517,5 +585,6 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
     getAttemptTelemetryTool,
     explainMissedQuestionTool,
     getLearningGoalsTool,
+    checkTopicMasteryTool,
   ];
 }

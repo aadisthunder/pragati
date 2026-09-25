@@ -126,10 +126,28 @@ describe('computeGoalMastery', () => {
     expect(result.masteryPct).toBe(0);
   });
 
-  it('handles empty subtopic lists without NaN', () => {
+  it('handles empty subtopic lists without NaN and derives mastery from topic-level state if present', () => {
     const result = computeGoalMastery('Calculus', [], []);
     expect(result.masteryPct).toBe(0);
     expect(result.subtopics).toHaveLength(0);
+
+    const statesWithTopic = [{ conceptSlug: 'dsa', mastery: 0.75, attempts: 3 }];
+    const dsaResult = computeGoalMastery('DSA', [], statesWithTopic as any);
+    expect(dsaResult.masteryPct).toBe(75);
+  });
+
+  it('reflects topic-level mastery when subtopics are present but not yet individually assessed', () => {
+    const states = [{ conceptSlug: 'data_structures', mastery: 0.8, attempts: 4 }];
+    const result = computeGoalMastery(
+      'Data Structures',
+      [
+        { id: 'st1', name: 'Arrays', slug: 'arrays' },
+        { id: 'st2', name: 'Trees', slug: 'trees' },
+      ],
+      states as any
+    );
+    // When subtopics have no attempts yet, overall goal reflects the parent topic's assessment
+    expect(result.masteryPct).toBe(80);
   });
 
   it('also matches learner states by concept name, not just slug', () => {

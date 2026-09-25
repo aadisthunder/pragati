@@ -13,6 +13,7 @@ import {
   updateMastery,
   nextReviewAt,
   matchConceptsForQuestion,
+  slugifyConceptName,
   type ConceptEvidence,
   type LearnerConceptState,
 } from './masteryCore.js';
@@ -29,8 +30,8 @@ export interface SubmitTelemetryInput {
 
 /**
  * Runs the adaptive loop for a completed attempt. Mirrors the Edge Function's
- * precedence: explicit DB mappings (question_concepts) > keyword matching >
- * quiz-topic fallback.
+ * precedence: explicit DB mappings (question_concepts) > learning goal subtopics >
+ * keyword matching > quiz-topic fallback.
  */
 export async function runAdaptiveSubmitLoop(
   scopedClient: SupabaseClient,
@@ -65,25 +66,81 @@ export async function runAdaptiveSubmitLoop(
     questionToSlugs.set((m as any).question_id, list);
   }
 
-  // 3. Fallback attribution for unmapped questions
-  for (const t of telemetry) {
-    if (questionToSlugs.has(t.question_id)) continue;
-    questionToSlugs.set(
-      t.question_id,
-      matchConceptsForQuestion(t.prompt || '', topic).map((c) => c.slug)
-    );
+  // 3. Fallback attribution for unmapped questions: check user goal subtopics first
+  let goalSubtopics: Array<{ name: string; slug: string }> = [];
+  try {
+    const { data: userGoals } = await scopedClient
+      .from('learning_goals')
+      .select('title, slug, goal_subtopics(name, slug)')
+      .eq('user_id', userId);
+    for (const g of userGoals || []) {
+      for (const st of (g as any).goal_subtopics || []) {
+        if (st && st.name && st.slug) {
+          goalSubtopics.push({ name: st.name, slug: st.slug });
+        }
+      }
+    }
+  } catch {
+    // Non-fatal
   }
 
-  const touchedSlugs = Array.from(new Set(Array.from(questionToSlugs.values()).flat()));
+  for (const t of telemetry) {
+    if (questionToSlugs.has(t.question_id)) continue;
+    const promptLower = String(t.prompt || '').toLowerCase();
+    const matchedFromGoals = goalSubtopics.filter(
+      (st) =>
+        promptLower.includes(st.name.toLowerCase()) ||
+        promptLower.includes(st.slug.replace(/_/g, ' '))
+    );
+    if (matchedFromGoals.length > 0) {
+      questionToSlugs.set(t.question_id, matchedFromGoals.map((s) => s.slug));
+    } else {
+      questionToSlugs.set(
+        t.question_id,
+        matchConceptsForQuestion(t.prompt || '', topic).map((c) => c.slug)
+      );
+    }
+  }
+
+  const topicSlug = slugifyConceptName(topic);
+  const touchedSlugs = Array.from(
+    new Set([...Array.from(questionToSlugs.values()).flat(), topicSlug].filter(Boolean))
+  );
   if (touchedSlugs.length === 0) return;
 
-  // 4. Resolve concept ids
+  // 4. Resolve concept ids (auto-register missing concepts so custom topics track mastery)
   const { data: conceptRows } = await scopedClient
     .from('concepts')
     .select('id, name, slug')
     .in('slug', touchedSlugs);
   const slugToId = new Map<string, string>();
   for (const row of conceptRows || []) slugToId.set(row.slug, row.id);
+
+  const missingSlugs = touchedSlugs.filter((s) => !slugToId.has(s));
+  if (missingSlugs.length > 0) {
+    const toInsert = missingSlugs.map((s) => {
+      const formattedName = s
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (char) => char.toUpperCase());
+      return {
+        topic: topic || 'General',
+        name: formattedName,
+        slug: s,
+        description: `Concept for ${topic || 'General'}`,
+      };
+    });
+    try {
+      const { data: createdConcepts } = await scopedClient
+        .from('concepts')
+        .insert(toInsert)
+        .select('id, name, slug');
+      for (const c of createdConcepts || []) {
+        slugToId.set(c.slug, c.id);
+      }
+    } catch {
+      // Non-fatal fallback
+    }
+  }
 
   // 5. Load existing learner state
   const { data: existingStates } = await scopedClient
@@ -100,13 +157,17 @@ export async function runAdaptiveSubmitLoop(
   // 6. Group evidence per concept, update, persist
   const evidenceBySlug: Record<string, ConceptEvidence[]> = {};
   for (const t of telemetry) {
+    const itemEvidence: ConceptEvidence = {
+      correct: Boolean(t.is_correct),
+      skipped: Boolean(t.is_skipped),
+      dwellTimeSec: Number(t.dwell_time_sec) || 0,
+      hintsUsed: Number(t.hints_used) || 0,
+    };
     for (const slug of questionToSlugs.get(t.question_id) || []) {
-      (evidenceBySlug[slug] ??= []).push({
-        correct: Boolean(t.is_correct),
-        skipped: Boolean(t.is_skipped),
-        dwellTimeSec: Number(t.dwell_time_sec) || 0,
-        hintsUsed: Number(t.hints_used) || 0,
-      });
+      (evidenceBySlug[slug] ??= []).push(itemEvidence);
+    }
+    if (topicSlug) {
+      (evidenceBySlug[topicSlug] ??= []).push(itemEvidence);
     }
   }
 

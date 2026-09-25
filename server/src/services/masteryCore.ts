@@ -88,17 +88,54 @@ export interface ConceptTag {
 }
 
 /**
- * Keyword-matches question text against the seed taxonomy. Falls back to the
- * quiz topic as a single concept so mastery updates always have a target.
+ * Keyword-matches question text against the seed taxonomy, respecting quiz-topic
+ * affinity: a taxonomy concept only matches when its topic is related to the
+ * quiz topic (or the topic is unknown). Without this, a "Basic Data Structures"
+ * quiz mentioning the word "function" would pollute Calculus mastery.
+ * Falls back to the quiz topic as a single concept so mastery updates always
+ * have a target.
  */
 export function matchConceptsForQuestion(text: string, fallbackTopic: string): ConceptTag[] {
   const lower = String(text).toLowerCase();
-  const matched = KNOWN_CONCEPTS.filter((c) => c.keywords.some((k) => lower.includes(k)));
+  const topicLower = String(fallbackTopic || '').toLowerCase();
+  const matched = KNOWN_CONCEPTS.filter((c) => {
+    if (!c.keywords.some((k) => lower.includes(k))) return false;
+    // Topic affinity: the concept's topic (or a keyword) must appear in the
+    // quiz topic, or the topic may not constrain attribution when absent.
+    if (!topicLower) return true;
+    const topicSlug = slugifyConceptName(topicLower);
+    const conceptTopicSlug = slugifyConceptName(c.topic);
+    return (
+      topicLower.includes(c.topic.toLowerCase()) ||
+      c.topic.toLowerCase().includes(topicLower) ||
+      topicSlug === conceptTopicSlug ||
+      topicSlug.startsWith(`${conceptTopicSlug}_`) ||
+      conceptTopicSlug.startsWith(`${topicSlug}_`) ||
+      c.keywords.some((k) => topicLower.includes(k))
+    );
+  });
   if (matched.length > 0) {
     return matched.map((c) => ({ name: c.name, slug: c.slug, prerequisites: [] }));
   }
   const safeTopic = String(fallbackTopic || 'General').trim().slice(0, 60) || 'General';
   return [{ name: safeTopic, slug: slugifyConceptName(safeTopic), prerequisites: [] }];
+}
+
+/**
+ * Attaches normalized concept tags to every question of a generated quiz —
+ * the pure heart of generation-time tagging (D2). Both backends call this
+ * before persisting questions so question_concepts rows can be written and
+ * submit-time attribution becomes exact instead of keyword-guessed.
+ * Never throws and never leaves a question untagged (topic fallback).
+ */
+export function tagQuestionsWithConcepts<T extends { prompt?: string; hint?: string; explanation?: string }>(
+  questions: T[],
+  fallbackTopic: string
+): Array<T & { concepts: ConceptTag[] }> {
+  return (questions || []).map((q) => {
+    const searchText = `${q.prompt || ''} ${q.hint || ''} ${q.explanation || ''}`;
+    return { ...q, concepts: matchConceptsForQuestion(searchText, fallbackTopic) };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -186,4 +223,41 @@ export function nextReviewAt(mastery: number, from: Date = new Date()): Date {
   const d = new Date(from);
   d.setDate(d.getDate() + days);
   return d;
+}
+
+export function buildConceptMappingPayload(
+  quizId: string,
+  questions: Array<{ id?: string; prompt?: string; concepts?: Array<{ name: string; slug: string }> }>
+): {
+  p_quiz_id: string;
+  p_mappings: Array<{
+    question_id?: string;
+    concept_name: string;
+    concept_slug: string;
+  }>;
+} {
+  const mappings: Array<{
+    question_id?: string;
+    concept_name: string;
+    concept_slug: string;
+  }> = [];
+
+  (questions || []).forEach((q) => {
+    if (Array.isArray(q?.concepts)) {
+      for (const c of q.concepts) {
+        if (c && c.slug) {
+          mappings.push({
+            question_id: q.id,
+            concept_name: c.name || c.slug,
+            concept_slug: c.slug,
+          });
+        }
+      }
+    }
+  });
+
+  return {
+    p_quiz_id: quizId,
+    p_mappings: mappings,
+  };
 }

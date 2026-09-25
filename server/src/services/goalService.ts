@@ -166,15 +166,23 @@ export function computeGoalMastery(
     }
   }
 
+  /** Trims singular/plural drift so "arrays" ↔ "array" match. */
+  const singularize = (slug: string) => slug.replace(/_?s$/, '');
+
   const subtopicRows: SubtopicMastery[] = subtopics.map((st) => {
     const nameSlug = slugifyGoalName(st.name);
+    const singularSlug = singularize(st.slug);
+    const singularNameSlug = singularize(nameSlug);
     const bySlug = stateBySlug.get(st.slug);
     const byName =
       bySlug ||
       [...stateBySlug.values()].find((s) => {
         const stateSlug = slugifyGoalName(s.conceptSlug);
+        const stateSingular = singularize(stateSlug);
         return (
           stateSlug === nameSlug ||
+          stateSingular === singularSlug ||
+          stateSingular === singularNameSlug ||
           (nameSlug.length >= 4 && stateSlug.startsWith(`${nameSlug}_`))
         );
       });
@@ -189,8 +197,30 @@ export function computeGoalMastery(
     };
   });
 
+  const goalTitleSlug = slugifyGoalName(title);
+  const topicState =
+    stateBySlug.get(goalTitleSlug) ||
+    [...stateBySlug.values()].find((s) => {
+      const stateSlug = slugifyGoalName(s.conceptSlug);
+      return (
+        stateSlug === goalTitleSlug ||
+        (goalTitleSlug.length >= 3 && stateSlug.startsWith(`${goalTitleSlug}_`)) ||
+        (stateSlug.length >= 3 && goalTitleSlug.startsWith(`${stateSlug}_`))
+      );
+    });
+  const topicMasteryPct = topicState ? Math.round(Math.max(0, Math.min(1, Number(topicState.mastery) || 0)) * 100) : 0;
+
   const total = subtopicRows.reduce((sum, s) => sum + s.masteryPct, 0);
-  const masteryPct = subtopicRows.length > 0 ? Math.round(total / subtopicRows.length) : 0;
+  const subtopicsAssessed = subtopicRows.some((s) => s.attempts > 0 || s.masteryPct > 0);
+
+  let masteryPct = 0;
+  if (subtopicsAssessed && subtopicRows.length > 0) {
+    masteryPct = Math.round(total / subtopicRows.length);
+  } else if (topicMasteryPct > 0) {
+    masteryPct = topicMasteryPct;
+  } else if (subtopicRows.length > 0) {
+    masteryPct = Math.round(total / subtopicRows.length);
+  }
 
   return { title, masteryPct, subtopics: subtopicRows };
 }

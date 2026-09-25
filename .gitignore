@@ -98,3 +98,15 @@ test-results/
 # Agent & IDE scratch
 .gemini/
 
+# Media & Presentation Binaries (Large binary files)
+*.mp4
+*.pptx
+*.mov
+*.avi
+*.webm
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/

@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pragati - Hackathon Pitch Deck</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: rgba(17, 24, 39, 0.7);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --primary: #6366f1;
+      --primary-light: #818cf8;
+      --accent: #06b6d4;
+      --accent-emerald: #10b981;
+      --accent-rose: #f43f5e;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text-main);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      min-height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background-image: 
+        radial-gradient(circle at 15% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 40%),
+        radial-gradient(circle at 85% 80%, rgba(6, 182, 212, 0.12) 0%, transparent 40%);
+    }
+
+    .slide-deck {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      max-width: 1440px;
+      max-height: 900px;
+      aspect-ratio: 16 / 9;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      padding: 48px 64px 80px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      opacity: 0;
+      visibility: hidden;
+      transform: scale(0.98);
+      transition: opacity 0.4s ease, transform 0.4s ease, visibility 0.4s;
+    }
+
+    .slide.active {
+      opacity: 1;
+      visibility: visible;
+      transform: scale(1);
+    }
+
+    /* Header Bar */
+    .slide-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 14px;
+      background: rgba(99, 102, 241, 0.12);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--primary-light);
+      letter-spacing: 0.5px;
+    }
+
+    .brand-badge span.dot {
+      width: 8px;
+      height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--accent);
+    }
+
+    .slide-number {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* Titles */
+    .title-area {
+      margin-bottom: 28px;
+    }
+
+    .headline {
+      font-size: 40px;
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #ffffff 40%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 10px;
+    }
+
+    .subheadline {
+      font-size: 18px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* Layout Grids */
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      flex: 1;
+      align-items: stretch;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 32px;
+      flex: 1;
+      align-items: stretch;
+    }
+
+    /* Feature Cards */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 28px;
+      backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.4), transparent);
+    }
+
+    .card-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      margin-bottom: 16px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .card-title {
+      font-size: 19px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 10px;
+    }
+
+    .card-desc {
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--text-muted);
+    }
+
+    .stat-badge {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 6px;
+      margin-top: 14px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .stat-rose { background: rgba(244, 63, 94, 0.12); color: var(--accent-rose); border: 1px solid rgba(244, 63, 94, 0.3); }
+    .stat-emerald { background: rgba(16, 185, 129, 0.12); color: var(--accent-emerald); border: 1px solid rgba(16, 185, 129, 0.3); }
+    .stat-primary { background: rgba(99, 102, 241, 0.12); color: var(--primary-light); border: 1px solid rgba(99, 102, 241, 0.3); }
+
+    /* Ladder list */
+    .ladder {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .ladder-step {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .ladder-step span.label { font-weight: 600; }
+    .ladder-step span.range { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-muted); }
+
+    /* Bottom Navigation Controls */
+    .controls {
+      position: absolute;
+      bottom: 24px;
+      left: 64px;
+      right: 64px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 10;
+    }
+
+    .dots {
+      display: flex;
+      gap: 8px;
+    }
+
+    .dot-btn {
+      width: 10px;
+      height: 10px;
+      border-radius: 9999px;
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .dot-btn.active {
+      width: 28px;
+      background: var(--primary-light);
+    }
+
+    .nav-buttons {
+      display: flex;
+      gap: 12px;
+    }
+
+    .nav-btn {
+      padding: 8px 16px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #fff;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .nav-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .nav-btn.primary {
+      background: var(--primary);
+      border-color: var(--primary-light);
+    }
+
+    .nav-btn.primary:hover {
+      background: #4f46e5;
+    }
+
+    .code-pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #38bdf8;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="slide-deck">
+
+    <!-- SLIDE 1: PROBLEM STATEMENT -->
+    <section class="slide active" id="slide-1">
+      <div class="slide-header">
+        <div class="brand-badge">
+          <span class="dot"></span>
+          PRAGATI · HORIZON HOLLOW HACKATHON
+        </div>
+        <div class="slide-number">01 / 03</div>
+      </div>
+
+      <div class="title-area">
+        <h1 class="headline">The AI Tutor Amnesia Problem</h1>
+        <p class="subheadline">Why millions of students abandon generic chatbots and flat quiz apps</p>
+      </div>
+
+      <div class="grid-3">
+        <div class="card">
+          <div class="card-icon" style="color: #f43f5e; background: rgba(244, 63, 94, 0.1);">✗</div>
+          <h2 class="card-title">Zero Memory Across Chats</h2>
+          <p class="card-desc">
+            Standard LLMs forget everything once a session ends. Students are forced to re-prompt their syllabus, re-explain what they struggled with, and start over from scratch every single day.
+          </p>
+          <div class="stat-badge stat-rose">
+            <span>0% Persistence across sessions</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-icon" style="color: #f59e0b; background: rgba(245, 158, 11, 0.1);">⚠</div>
+          <h2 class="card-title">Answer Spoiling vs Socratic Mentoring</h2>
+          <p class="card-desc">
+            Generic chatbots hand out direct answers immediately, killing critical thinking. They act like homework calculators instead of patient mentors guiding through conceptual roadblocks.
+          </p>
+          <div class="stat-badge stat-rose">
+            <span>80% Loss in retention (Ebbinghaus curve)</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-icon" style="color: #06b6d4; background: rgba(6, 182, 212, 0.1);">⇄</div>
+          <h2 class="card-title">Flat, Blind Assessment</h2>
+          <p class="card-desc">
+            Traditional quizzes test everyone with identical questions regardless of whether a student has 10% or 95% mastery. No telemetry on dwell time, no hint penalties, and zero difficulty adaptation.
+          </p>
+          <div class="stat-badge stat-rose">
+            <span>One-size-fits-all quiz failure</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 2: THE SOLUTION -->
+    <section class="slide" id="slide-2">
+      <div class="slide-header">
+        <div class="brand-badge">
+          <span class="dot"></span>
+          PRAGATI · THE SOLUTION
+        </div>
+        <div class="slide-number">02 / 03</div>
+      </div>
+
+      <div class="title-area">
+        <h1 class="headline">Pragati: The Self-Evolving Learning Companion</h1>
+        <p class="subheadline">Persistent goal memory, autonomous mastery tooling, and adaptive testing</p>
+      </div>
+
+      <div class="grid-3">
+        <div class="card">
+          <div class="card-icon" style="color: #818cf8; background: rgba(99, 102, 241, 0.1);">🎯</div>
+          <h2 class="card-title">Persistent Goal Memory</h2>
+          <p class="card-desc">
+            Student goals (e.g. "DSA", "Calculus") and subtopics live in real-time database state. Every chat session loads full mastery history instantly, tailoring every interaction.
+          </p>
+          <div class="stat-badge stat-emerald">
+            <span>✓ Remembers goals across all chats</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-icon" style="color: #06b6d4; background: rgba(6, 182, 212, 0.1);">🤖</div>
+          <h2 class="card-title">Autonomous Mastery Tool</h2>
+          <p class="card-desc">
+            On clicking <span class="code-pill">Test me</span>, the prompt sends just the topic name. The agent calls <span class="code-pill">check_topic_mastery</span>, inspects live scores, suggests adapted difficulty, and asks the student to pick a subtopic.
+          </p>
+          <div class="stat-badge stat-primary">
+            <span>✓ Agent acts as active tutor, not vending machine</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-icon" style="color: #10b981; background: rgba(16, 185, 129, 0.1);">📈</div>
+          <h2 class="card-title">4-Tier Difficulty Ladder</h2>
+          <div class="ladder">
+            <div class="ladder-step">
+              <span class="label" style="color: #60a5fa;">Beginner</span>
+              <span class="range">&lt; 50% Mastery</span>
+            </div>
+            <div class="ladder-step">
+              <span class="label" style="color: #34d399;">Intermediate</span>
+              <span class="range">50% – 79% Mastery</span>
+            </div>
+            <div class="ladder-step">
+              <span class="label" style="color: #fbbf24;">Advanced</span>
+              <span class="range">80% – 89% Mastery</span>
+            </div>
+            <div class="ladder-step">
+              <span class="label" style="color: #f43f5e;">Expert</span>
+              <span class="range">&ge; 90% Mastery</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 3: ARCHITECTURE & DEMO TRANSITION -->
+    <section class="slide" id="slide-3">
+      <div class="slide-header">
+        <div class="brand-badge">
+          <span class="dot"></span>
+          PRAGATI · ARCHITECTURE & DEMO
+        </div>
+        <div class="slide-number">03 / 03</div>
+      </div>
+
+      <div class="title-area">
+        <h1 class="headline">Engineered for Production Rigor</h1>
+        <p class="subheadline">Clean schemas, zero answer leakage, and live telemetry synchronization</p>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-icon" style="color: #a78bfa; background: rgba(167, 139, 250, 0.1);">⚡</div>
+          <h2 class="card-title">Full-Stack Intelligence Architecture</h2>
+          <p class="card-desc" style="margin-bottom: 12px;">
+            Dual backend setup ensuring zero latency and high availability:
+          </p>
+          <ul style="list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: var(--text-muted);">
+            <li><strong style="color: #fff;">1. Express Node.js & Supabase Edge Functions:</strong> Parity-checked via 141 automated vitest unit & evaluation test cases.</li>
+            <li><strong style="color: #fff;">2. Zero Leakage Engine:</strong> Server-side question stripping prevents LLM answer spoilers before interactive cards render.</li>
+            <li><strong style="color: #fff;">3. Multi-Factor Telemetry:</strong> Records per-question dwell time, hint penalty deductions, and dynamically updates ELO skill rating.</li>
+            <li><strong style="color: #fff;">4. Questions to Review:</strong> Automatically funnels missed questions into targeted Socratic review sessions.</li>
+          </ul>
+        </div>
+
+        <div class="card" style="justify-content: center; align-items: center; text-align: center; border-color: rgba(99, 102, 241, 0.4); background: linear-gradient(180deg, rgba(17, 24, 39, 0.8) 0%, rgba(99, 102, 241, 0.12) 100%);">
+          <div style="font-size: 48px; margin-bottom: 16px;">🚀</div>
+          <h2 class="card-title" style="font-size: 24px; margin-bottom: 8px;">Let's See It in Action</h2>
+          <p class="card-desc" style="max-width: 320px; margin-bottom: 24px;">
+            Watch Pragati remember learning goals, adapt difficulty in real time, and tutor Socratically.
+          </p>
+          <a href="/topics" target="_blank" class="nav-btn primary" style="text-decoration: none; padding: 12px 24px; font-size: 15px;">
+            Switch to Live Demonstration →
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- CONTROLS -->
+    <div class="controls">
+      <div class="dots">
+        <button class="dot-btn active" onclick="goToSlide(0)"></button>
+        <button class="dot-btn" onclick="goToSlide(1)"></button>
+        <button class="dot-btn" onclick="goToSlide(2)"></button>
+      </div>
+      <div class="nav-buttons">
+        <button class="nav-btn" onclick="prevSlide()">← Previous</button>
+        <button class="nav-btn primary" onclick="nextSlide()">Next Slide →</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    let currentSlide = 0;
+    const slides = document.querySelectorAll('.slide');
+    const dots = document.querySelectorAll('.dot-btn');
+
+    function showSlide(index) {
+      if (index < 0 || index >= slides.length) return;
+      slides[currentSlide].classList.remove('active');
+      dots[currentSlide].classList.remove('active');
+
+      currentSlide = index;
+      slides[currentSlide].classList.add('active');
+      dots[currentSlide].classList.add('active');
+    }
+
+    function nextSlide() {
+      if (currentSlide < slides.length - 1) {
+        showSlide(currentSlide + 1);
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 0) {
+        showSlide(currentSlide - 1);
+      }
+    }
+
+    function goToSlide(index) {
+      showSlide(index);
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') {
+        nextSlide();
+      } else if (e.key === 'ArrowLeft') {
+        prevSlide();
+      }
+    });
+  </script>
+</body>
+</html>

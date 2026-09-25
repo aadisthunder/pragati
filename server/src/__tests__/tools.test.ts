@@ -38,6 +38,16 @@ describe('Agent Tools & Sanitization', () => {
       expect(args.difficulty).toBe('intermediate');
     });
 
+    it('backfills difficulty based on user message when not provided in args', () => {
+      const userMsg = 'Generate a quiz on topic: Trees with beginner difficulty';
+      const args = sanitizeToolArgs('generate_quiz', {}, userMsg);
+      expect(args.difficulty).toBe('beginner');
+
+      const advMsg = 'Generate a quiz on Graph Theory adapt difficulty to advanced';
+      const advArgs = sanitizeToolArgs('generate_quiz', {}, advMsg);
+      expect(advArgs.difficulty).toBe('advanced');
+    });
+
     it('handles get_student_performance limit argument', () => {
       const args = sanitizeToolArgs('get_student_performance', {});
       expect(args.limit).toBe(5);
@@ -47,10 +57,18 @@ describe('Agent Tools & Sanitization', () => {
       const args = sanitizeToolArgs('get_questions_to_review', {});
       expect(args.limit).toBe(10);
     });
+
+    it('backfills topic for check_topic_mastery from user message when missing', () => {
+      const args1 = sanitizeToolArgs('check_topic_mastery', {}, 'Test me on my learning goal "DSA".');
+      expect(args1.topic).toBe('DSA');
+
+      const args2 = sanitizeToolArgs('check_topic_mastery', {}, 'Test me on Calculus');
+      expect(args2.topic).toBe('Calculus');
+    });
   });
 
   describe('createAgentTools tool registry', () => {
-    it('registers generate_quiz, get_student_performance, and get_questions_to_review', () => {
+    it('registers generate_quiz, get_student_performance, get_questions_to_review, and check_topic_mastery', () => {
       const dummyClient = {} as any;
       const dummyLlm = {} as any;
       const tools = createAgentTools(dummyClient, 'user-123', dummyLlm);
@@ -59,6 +77,8 @@ describe('Agent Tools & Sanitization', () => {
       expect(toolNames).toContain('generate_quiz');
       expect(toolNames).toContain('get_student_performance');
       expect(toolNames).toContain('get_questions_to_review');
+      expect(toolNames).toContain('check_topic_mastery');
+      expect(toolNames).toContain('get_learning_goals');
     });
   });
 });

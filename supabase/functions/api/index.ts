@@ -62,7 +62,7 @@ function isAllowedOrigin(origin: string): boolean {
 }
 
 const SYSTEM_PROMPT =
-  'You are Pragati AI Instructor, a warm, encouraging, and rigorous Socratic learning mentor. Never give direct answers right away. Guide students with probing questions, analogies, and conceptual hints. Format equations in LaTeX ($...$ for inline, $$...$$ for block). NEVER use emojis. You may receive a PERSISTENT LEARNER MEMORY block: it lists the learning goals the student is working toward with live mastery percentages. Use it to personalize guidance and offer targeted tests when the conversation genuinely touches a goal, but always answer unrelated questions fully and normally.';
+  'You are Pragati AI Instructor, a warm, encouraging, and rigorous Socratic learning mentor. Never give direct answers right away. Guide students with probing questions, analogies, and conceptual hints. Format equations in LaTeX ($...$ for inline, $$...$$ for block). NEVER use emojis. You may receive a PERSISTENT LEARNER MEMORY block: it lists the learning goals the student is working toward with live mastery percentages. When a student asks to test understanding of a goal or asks for an assessment on a topic (e.g. "Test me on DSA" or "Test me on my learning goal \'DSA\'"), call check_topic_mastery to check their live mastery percentage and subtopics, state their current mastery and adapted difficulty level (Beginner for <50%, Intermediate for 50-80%, Advanced for >80%), and ask which subtopic they want to focus on before generating the quiz. Do not generate the quiz until the student chooses or confirms a subtopic. Always answer unrelated questions fully and normally.';
 
 Deno.serve(async (req: Request) => {
   const origin = req.headers.get('Origin') || '';
@@ -1272,6 +1272,43 @@ Deno.serve(async (req: Request) => {
                     ? 'The student has not set any learning goals yet.'
                     : undefined,
               });
+            } else if (call.name === 'check_topic_mastery') {
+              const goalsData = await fetchGoalsForChat(supabase, userId, clientGoals);
+              const requestedTopic = (args.topic || '').trim().toLowerCase();
+              const goal = goalsData.find(
+                (g) =>
+                  g.title.toLowerCase().trim() === requestedTopic ||
+                  g.title.toLowerCase().includes(requestedTopic) ||
+                  requestedTopic.includes(g.title.toLowerCase().trim())
+              );
+              if (goal) {
+                const goalDiff = goal.masteryPct < 50 ? 'beginner' : goal.masteryPct < 80 ? 'intermediate' : 'advanced';
+                toolResult = JSON.stringify({
+                  action: 'TOPIC_MASTERY_RETRIEVED',
+                  found: true,
+                  topic: goal.title,
+                  mastery_pct: goal.masteryPct,
+                  recommended_difficulty: goalDiff,
+                  subtopics: goal.subtopics.map((s) => ({
+                    name: s.name,
+                    mastery_pct: s.masteryPct,
+                    recommended_difficulty: s.masteryPct < 50 ? 'beginner' : s.masteryPct < 80 ? 'intermediate' : 'advanced',
+                  })),
+                  instructions:
+                    'Present the student with their current mastery percentage and recommended difficulty level. List the available subtopics with their recommended difficulties. Ask the student which subtopic they want to test before calling generate_quiz, and wait for their answer.',
+                });
+              } else {
+                toolResult = JSON.stringify({
+                  action: 'TOPIC_MASTERY_RETRIEVED',
+                  found: false,
+                  topic: args.topic || '',
+                  mastery_pct: 0,
+                  recommended_difficulty: 'beginner',
+                  subtopics: [],
+                  available_goals: goalsData.map((g) => g.title),
+                  message: `No active learning goal named "${args.topic}" found. Defaulting to beginner level.`,
+                });
+              }
             } else if (call.name === 'get_questions_to_review') {
               const { data: missedQuestions, error } = await supabase
                 .from('question_telemetry')
@@ -1549,7 +1586,16 @@ async function ensureConceptsSeeded(
         .eq('topic', c.topic)
         .eq('slug', c.slug)
         .maybeSingle();
-      if (data) conceptId = data.id;
+      if (data) {
+        conceptId = data.id;
+      } else {
+        const { data: inserted } = await scopedClient
+          .from('concepts')
+          .insert({ topic: c.topic, name: c.name, slug: c.slug, description: '' })
+          .select('id, name, slug')
+          .maybeSingle();
+        if (inserted) conceptId = inserted.id;
+      }
     }
 
     if (conceptId) {
@@ -1621,7 +1667,6 @@ async function runAdaptiveLoop(
   if (touchedSlugs.length === 0) return null;
 
   // 3. Load existing learner state for touched concepts.
-  const touchedSlugs = Array.from(new Set(Array.from(questionToSlugs.values()).flat()));
   const { data: conceptRows } = await scopedClient
     .from('concepts')
     .select('id, name, slug')

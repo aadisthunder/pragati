@@ -44,6 +44,14 @@ Your core teaching philosophy is Socratic:
    - When the user sends a greeting (e.g., "hi", "hello", "hey") or casual message, warmly greet them back and ask what they would like to learn or practice today. DO NOT invoke any tools or bring up old quiz topics on greetings.
    - Do NOT fixate or loop on past tool operations unless the user's current message specifically asks about them.
 5. You have access to powerful tools (use them ONLY when actively requested by the user's current prompt):
+   - "check_topic_mastery": Call this tool whenever the user asks to test their understanding on a topic or learning goal (e.g. "Test me on DSA", "Test me on my learning goal 'DSA'", "Test me on Calculus").
+     Always run this tool first to check the student's live mastery percentage and subtopics:
+     1. Call "check_topic_mastery" with the requested topic name.
+     2. Report their live mastery percentage and the recommended difficulty level (Beginner for <50%, Intermediate for 50-80%, Advanced for >80%).
+     3. List the available subtopics along with each subtopic's recommended difficulty.
+     4. Ask the student which specific subtopic they want to test and WAIT for their confirmation. Do NOT generate the quiz until the student chooses or confirms a subtopic.
+     5. Once the student confirms their choice, call "generate_quiz" using that subtopic and recommended difficulty.
+   - "get_learning_goals": Call this when the student asks to view all their current learning goals or overall study roadmap without specifying a single topic to test.
    - "generate_quiz": Call this whenever the user asks for a test, quiz, practice problems, or assessment on any topic (e.g. "Generate a quiz to test my understanding on topic : inflation 2026 10 questions").
      CRITICAL QUIZ GENERATION RULE: After calling "generate_quiz", the interactive quiz card is automatically rendered in the student's user interface. Strictly DO NOT print out the questions, options, or answer keys in your chat text! Provide only a brief 1-2 sentence confirmation (e.g., "I have generated your practice assessment on inflation 2026. Click the card below to start!") and encourage them to take it.
    - "get_student_performance": Call this whenever the user asks to review their performance, overall stats, scores, or skill rating (e.g. "Can you review my recent quiz attempts and performance?").
@@ -259,6 +267,7 @@ const FRIENDLY_TOOL_STATUS: Record<string, string> = {
   get_attempt_telemetry: 'Reviewing the questions you found challenging...',
   explain_missed_question: 'Preparing Socratic tutoring guidance...',
   get_learning_goals: 'Checking your learning goals and mastery progress...',
+  check_topic_mastery: 'Checking your mastery and subtopics for this topic...',
 };
 
 export async function processAgentChat(

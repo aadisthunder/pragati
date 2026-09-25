@@ -70,7 +70,8 @@ export function getRatingDelta(
   accuracyPct: number,
   difficulty: string = 'intermediate'
 ): number {
-  const diffMultiplier = difficulty === 'advanced' ? 1.5 : difficulty === 'beginner' ? 0.75 : 1.0;
+  const diffMultiplier =
+    difficulty === 'expert' ? 1.75 : difficulty === 'advanced' ? 1.5 : difficulty === 'beginner' ? 0.75 : 1.0;
   
   if (accuracyPct >= 80) {
     return Math.round(25 * diffMultiplier);

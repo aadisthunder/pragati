@@ -39,7 +39,7 @@ create table if not exists public.quizzes (
   created_by uuid not null references auth.users (id) on delete cascade,
   topic text not null,
   difficulty text not null default 'intermediate'
-    check (difficulty in ('beginner', 'intermediate', 'advanced')),
+    check (difficulty in ('beginner', 'intermediate', 'advanced', 'expert')),
   total_questions integer not null default 0,
   created_at timestamptz not null default now()
 );
@@ -299,7 +299,9 @@ drop policy if exists "chat_msg_select_own"            on public.chat_messages;
 drop policy if exists "chat_msg_insert_own"            on public.chat_messages;
 drop policy if exists "chat_msg_delete_own"            on public.chat_messages;
 drop policy if exists "concepts_select_all"            on public.concepts;
+drop policy if exists "concepts_insert_authenticated"  on public.concepts;
 drop policy if exists "concept_prereqs_select_all"     on public.concept_prerequisites;
+drop policy if exists "concept_prereqs_insert_authenticated" on public.concept_prerequisites;
 drop policy if exists "question_concepts_select_own"   on public.question_concepts;
 drop policy if exists "learner_state_select_own"       on public.learner_concept_state;
 drop policy if exists "learner_state_insert_own"       on public.learner_concept_state;
@@ -358,10 +360,13 @@ create policy "chat_msg_select_own"    on public.chat_messages      for select u
 create policy "chat_msg_insert_own"    on public.chat_messages      for insert with check (auth.uid() = user_id);
 create policy "chat_msg_delete_own"    on public.chat_messages      for delete using (auth.uid() = user_id);
 
--- Adaptive learner model: concepts and the graph are shared read-only reference
--- data (seeded); only the server writes them via the service client.
+-- Adaptive learner model: concepts and the graph are shared reference data;
+-- authenticated users can register newly encountered concepts/topics from quizzes
+-- and learning goals so learner_concept_state always has valid concept rows.
 create policy "concepts_select_all" on public.concepts for select using (true);
+create policy "concepts_insert_authenticated" on public.concepts for insert to authenticated with check (true);
 create policy "concept_prereqs_select_all" on public.concept_prerequisites for select using (true);
+create policy "concept_prereqs_insert_authenticated" on public.concept_prerequisites for insert to authenticated with check (true);
 create policy "question_concepts_select_own" on public.question_concepts for select using (
   exists (
     select 1 from public.quizzes q

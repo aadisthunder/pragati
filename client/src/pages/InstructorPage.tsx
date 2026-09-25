@@ -54,8 +54,9 @@ interface Message {
 
 const PLACEHOLDER_PHRASES = [
   'Ask a doubt...',
-  'Request a quiz topic...',
+  'Diagnose my weak spots...',
   'Review missed questions...',
+  'Plan my learning path...',
 ];
 
 export const InstructorPage: React.FC = () => {

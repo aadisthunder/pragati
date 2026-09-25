@@ -2,10 +2,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { NavLink, Outlet, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LogOut, Award, Plus, MessageSquare, Trash2, Menu, X, SquarePen } from 'lucide-react';
+import { LogOut, Plus, MessageSquare, Trash2, Menu, X, SquarePen } from 'lucide-react';
 import {
   getSidebarNavItemClass,
-  getSecondaryBadgeClass,
   getMobileDrawerClass,
   getMobileBackdropClass,
   getFloatingMenuButtonClass,
@@ -14,7 +13,7 @@ import {
 } from '../../utils/theme';
 import { apiRequest, apiRequestCached, invalidateCache, getFromCache } from '../../api/client';
 import { OnboardingGoalModal } from '../onboarding/OnboardingGoalModal';
-import { buildSidebarNavItems, HELP_TOUR_PATH } from './sidebarNav';
+import { buildSidebarNavItems, filterVisibleChatSessions, HELP_TOUR_PATH } from './sidebarNav';
 import { FeatureTourModal } from '../tour/FeatureTourModal';
 import { nextPopupAfterTour, POPUP_GOAL_MODAL } from '../tour/onboardingFlow';
 import {
@@ -301,7 +300,7 @@ export const AppShell: React.FC = () => {
 
                         {sessions.length > 0 && (
                           <div className="pt-0.5 space-y-0.5">
-                            {sessions.map((sess) => {
+                            {filterVisibleChatSessions(sessions).map((sess) => {
                               const isCurrentSession = currentSessionId === sess.id;
                               return (
                                 <div
@@ -343,29 +342,25 @@ export const AppShell: React.FC = () => {
             </nav>
           </div>
 
-          {/* User Card & Rating */}
-          <div className="pt-4 border-t border-slate-200 mt-auto">
-            <div className="p-3.5 rounded-xl mb-3 border border-slate-200 bg-slate-50">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-medium text-slate-500">Skill Rating</span>
-                <div className={getSecondaryBadgeClass()}>
-                  <Award className="w-3 h-3 text-slate-600" />
-                  <span className="font-mono">{profile?.skill_rating || 1200}</span>
-                </div>
+          {/* Compact User Card & Integrated Sign Out */}
+          <div className="pt-3 border-t border-slate-200 mt-auto">
+            <div className="p-3 rounded-xl border border-slate-200 bg-slate-50 space-y-2.5">
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-slate-800 truncate font-display">
+                  {profile?.full_name || user?.email?.split('@')[0]}
+                </p>
+                <p className="text-[11px] text-slate-500 truncate font-mono mt-0.5">{user?.email}</p>
               </div>
-              <p className="text-xs font-bold text-slate-800 truncate font-display">
-                {profile?.full_name || user?.email?.split('@')[0]}
-              </p>
-              <p className="text-[11px] text-slate-400 truncate font-mono">{user?.email}</p>
-            </div>
 
-            <button
-              onClick={handleSignOut}
-              className="w-full flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-semibold text-red-600 hover:text-red-700 bg-white hover:bg-red-50/70 border border-red-200/80 hover:border-red-300 rounded-xl transition-colors shadow-xs cursor-pointer"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>Sign Out</span>
-            </button>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:text-rose-700 bg-white hover:bg-rose-50/70 border border-slate-200 hover:border-rose-200 rounded-lg transition-colors shadow-2xs cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Sign Out</span>
+              </button>
+            </div>
           </div>
         </div>
       </aside>

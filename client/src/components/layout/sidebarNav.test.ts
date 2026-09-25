@@ -38,3 +38,30 @@ describe('buildSidebarNavItems', () => {
     expect(React.isValidElement(React.createElement(help.icon))).toBe(true);
   });
 });
+
+describe('filterVisibleChatSessions', () => {
+  it('caps the visible chat sessions in sidebar to max 3 items', async () => {
+    const { filterVisibleChatSessions, MAX_SIDEBAR_CHAT_SESSIONS } = await import('./sidebarNav');
+    expect(MAX_SIDEBAR_CHAT_SESSIONS).toBe(3);
+
+    const mockSessions = [
+      { id: '1', title: 'Chat 1' },
+      { id: '2', title: 'Chat 2' },
+      { id: '3', title: 'Chat 3' },
+      { id: '4', title: 'Chat 4' },
+      { id: '5', title: 'Chat 5' },
+    ];
+
+    const visible = filterVisibleChatSessions(mockSessions);
+    expect(visible).toHaveLength(3);
+    expect(visible.map((s) => s.id)).toEqual(['1', '2', '3']);
+  });
+
+  it('handles empty or fewer than 3 sessions gracefully', async () => {
+    const { filterVisibleChatSessions } = await import('./sidebarNav');
+    expect(filterVisibleChatSessions([])).toEqual([]);
+    expect(filterVisibleChatSessions([{ id: '1', title: 'Chat 1' }])).toHaveLength(1);
+    expect(filterVisibleChatSessions(null as any)).toEqual([]);
+  });
+});
+

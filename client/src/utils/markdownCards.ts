@@ -47,23 +47,30 @@ export interface ChipSuggestion {
   prompt: string;
 }
 
+/**
+ * Chat composer chips. Deliberately span the FULL agent loop — diagnose →
+ * teach → re-teach → plan — so the product reads as a complete AI learning
+ * agent, not just a quiz maker.
+ */
 export const CHIP_SUGGESTIONS: ChipSuggestion[] = [
   {
     label: 'Ask a doubt',
     prompt: 'I have a doubt regarding: ',
   },
   {
-    label: 'Request a quiz topic',
-    prompt: 'Generate a quiz to test my understanding on topic : ',
-  },
-  {
-    label: 'Review performance',
-    prompt: 'Can you review my recent quiz attempts and performance?',
+    label: 'Diagnose my weak spots',
+    prompt:
+      'Check my quiz history and concept mastery: which concepts am I weakest in, and what exactly should I practice next?',
   },
   {
     label: 'Review missed questions',
     prompt:
       'Review the questions I missed or skipped in my recent quiz attempts and explain how to solve them step-by-step',
+  },
+  {
+    label: 'Plan my learning path',
+    prompt:
+      'Using my goals and mastery levels, what should I learn next? Suggest a prerequisite-ordered study plan.',
   },
 ];
 

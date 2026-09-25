@@ -23,3 +23,16 @@ export function buildSidebarNavItems(): SidebarNavItem[] {
     { to: HELP_TOUR_PATH, label: 'Help', icon: CircleHelp },
   ];
 }
+
+/** Maximum number of previous chat history sessions displayed in the sidebar. */
+export const MAX_SIDEBAR_CHAT_SESSIONS = 3;
+
+/**
+ * Caps visible chat history items in the sidebar to maintain a compact vertical
+ * layout without pushing the user card and navigation off-screen.
+ */
+export function filterVisibleChatSessions<T>(sessions: T[] | null | undefined, maxCount = MAX_SIDEBAR_CHAT_SESSIONS): T[] {
+  if (!Array.isArray(sessions)) return [];
+  return sessions.slice(0, Math.max(0, maxCount));
+}
+

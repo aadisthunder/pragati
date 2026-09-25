@@ -23,6 +23,7 @@ import {
 } from '../api/goals';
 import { OnboardingGoalModal } from '../components/onboarding/OnboardingGoalModal';
 import { getResponsivePageContainerClass, getPermanentCardClass } from '../utils/theme';
+import { buildTestMePrompt } from '../utils/quizDifficulty';
 
 const MAX_SUBTOPICS = 6;
 
@@ -362,12 +363,8 @@ export const TopicsPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          const weakestSubtopic = weakest?.masteryPct < 100 ? weakest?.name : goal.title;
-                          navigate(
-                            `/instructor?prompt=${encodeURIComponent(
-                              `I want to test my understanding of ${weakestSubtopic} for my learning goal "${goal.title}". Generate a quiz to measure my mastery.`
-                            )}`
-                          );
+                          const testPrompt = buildTestMePrompt(goal);
+                          navigate(`/instructor?prompt=${encodeURIComponent(testPrompt)}`);
                         }}
                         className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors shadow-xs cursor-pointer"
                       >
