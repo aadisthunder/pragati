@@ -20,6 +20,8 @@ import { authRouter } from './routes/authRoutes.js';
 import { instructorRouter } from './routes/instructorRoutes.js';
 import { quizRouter } from './routes/quizRoutes.js';
 import { analyticsRouter } from './routes/analyticsRoutes.js';
+import { goalsRouter } from './routes/goalRoutes.js';
+import { onboardingRouter } from './routes/onboardingRoutes.js';
 
 const app = express();
 // Number("0") is 0 (falsy) so a PORT env of "0" or "" safely falls back to 5000,
@@ -84,17 +86,22 @@ app.use('/api/auth', authMiddleware, authRouter);
 app.use('/api/instructor', authMiddleware);
 app.use('/api/quizzes', authMiddleware);
 app.use('/api/analytics', authMiddleware);
+app.use('/api/goals', authMiddleware);
+app.use('/api/onboarding', authMiddleware);
 
 // Sensitive Route Limiters (per authenticated user, IP fallback for safety)
 app.use('/api/instructor/chat', chatRateLimiter);
 app.use('/api/instructor/ocr', ocrRateLimiter);
 app.use('/api/quizzes', quizRateLimiter);
 app.use('/api/analytics', quizRateLimiter);
+app.use('/api/goals', quizRateLimiter);
 
 // Routers
 app.use('/api/instructor', instructorRouter);
 app.use('/api/quizzes', quizRouter);
 app.use('/api/analytics', analyticsRouter);
+app.use('/api/goals', goalsRouter);
+app.use('/api/onboarding', onboardingRouter);
 
 // 404 Handler for undefined API routes
 app.use('/api', (req, res) => {

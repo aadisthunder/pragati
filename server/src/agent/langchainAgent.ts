@@ -2,6 +2,12 @@ import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, AIMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
 import { createScopedClient } from '../config/supabase.js';
 import { createAgentTools, sanitizeToolArgs } from './tools.js';
+import {
+  buildGoalMemoryBlock,
+  sanitizeClientGoals,
+  loadGoalMastery,
+  type GoalMasteryResult,
+} from '../services/goalService.js';
 
 const baseURL = process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
 
@@ -252,6 +258,7 @@ const FRIENDLY_TOOL_STATUS: Record<string, string> = {
   get_student_attempts: 'Looking up your recent quiz performance...',
   get_attempt_telemetry: 'Reviewing the questions you found challenging...',
   explain_missed_question: 'Preparing Socratic tutoring guidance...',
+  get_learning_goals: 'Checking your learning goals and mastery progress...',
 };
 
 export async function processAgentChat(
@@ -259,7 +266,8 @@ export async function processAgentChat(
   userMessage: string,
   history: any = [],
   userToken: string,
-  onStep?: AgentStepCallback
+  onStep?: AgentStepCallback,
+  clientGoalsRaw?: any
 ) {
   onStep?.({ phase: 'thinking', text: 'AI Instructor is thinking...' });
 
@@ -270,8 +278,30 @@ export async function processAgentChat(
   const toolMap = new Map(tools.map(t => [t.name, t]));
   const llmWithTools = llm.bindTools(tools);
 
+  // Persistent learner memory: goals + live mastery, injected into the system
+  // prompt so tool selection stays semantic (the model decides when the
+  // conversation touches a goal). Client-provided goals are a sanitized
+  // fallback for the read-only demo account. Failure never blocks the chat.
+  let goalMemoryGoals: GoalMasteryResult[] = [];
+  const clientGoals = sanitizeClientGoals(clientGoalsRaw);
+  try {
+    goalMemoryGoals = await loadGoalMastery(scopedClient, userId);
+  } catch (err: any) {
+    console.error('loadGoalMastery failed (chat continues without memory):', err?.message || err);
+  }
+  if (goalMemoryGoals.length === 0 && clientGoals.length > 0) {
+    goalMemoryGoals = clientGoals.map((g) => ({ goalId: g.id, title: g.title, masteryPct: g.masteryPct, subtopics: [] }));
+  }
+  const goalMemoryBlock = buildGoalMemoryBlock(
+    goalMemoryGoals.map((g) => ({
+      title: g.title,
+      masteryPct: g.masteryPct,
+      subtopics: g.subtopics.map((s) => ({ name: s.name, masteryPct: s.masteryPct })),
+    }))
+  );
+
   // Convert history into LangChain messages
-  const messages: any[] = [new SystemMessage(SYSTEM_PROMPT)];
+  const messages: any[] = [new SystemMessage(goalMemoryBlock ? `${SYSTEM_PROMPT}\n\n${goalMemoryBlock}` : SYSTEM_PROMPT)];
   for (const msg of cleanHistory) {
     if (msg.role === 'user') messages.push(new HumanMessage(msg.content));
     else if (msg.role === 'assistant') messages.push(new AIMessage(msg.content));

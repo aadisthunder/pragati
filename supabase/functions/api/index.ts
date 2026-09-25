@@ -31,6 +31,15 @@ import {
   buildAssessedInputs,
   type ConceptEvidenceInput,
 } from './_shared/adaptiveLoop.ts';
+import {
+  parseSubtopicPlan,
+  computeGoalMastery,
+  buildGoalMemoryBlock,
+  sanitizeClientGoals,
+  slugifyGoalName,
+  MAX_SUBTOPICS_PER_GOAL,
+  type GoalMasteryResult,
+} from './_shared/goalMemory.ts';
 
 const allowedOrigins = [
   'https://pragati-aadi.web.app',
@@ -53,7 +62,7 @@ function isAllowedOrigin(origin: string): boolean {
 }
 
 const SYSTEM_PROMPT =
-  'You are Pragati AI Instructor, a warm, encouraging, and rigorous Socratic learning mentor. Never give direct answers right away. Guide students with probing questions, analogies, and conceptual hints. Format equations in LaTeX ($...$ for inline, $$...$$ for block). NEVER use emojis.';
+  'You are Pragati AI Instructor, a warm, encouraging, and rigorous Socratic learning mentor. Never give direct answers right away. Guide students with probing questions, analogies, and conceptual hints. Format equations in LaTeX ($...$ for inline, $$...$$ for block). NEVER use emojis. You may receive a PERSISTENT LEARNER MEMORY block: it lists the learning goals the student is working toward with live mastery percentages. Use it to personalize guidance and offer targeted tests when the conversation genuinely touches a goal, but always answer unrelated questions fully and normally.';
 
 Deno.serve(async (req: Request) => {
   const origin = req.headers.get('Origin') || '';
@@ -156,6 +165,13 @@ Deno.serve(async (req: Request) => {
         .eq('id', userId)
         .maybeSingle();
 
+      // Onboarding is complete when the flag is stamped OR the account
+      // already has goals (legacy users get no popup). The read-only demo
+      // can never persist the flag, so it always reports incomplete.
+      const { count: goalCount } = await supabase
+        .from('learning_goals')
+        .select('id', { count: 'exact', head: true });
+
       return jsonResponse({
         user: {
           id: userId,
@@ -164,6 +180,8 @@ Deno.serve(async (req: Request) => {
           skill_rating: profile?.skill_rating || 1200,
           streak_days: profile?.streak_days || 0,
           avatar_url: profile?.avatar_url,
+          onboarding_completed: Boolean(profile?.onboarding_completed_at || (goalCount ?? 0) > 0),
+          is_readonly_demo: user.email === 'judge.pragati@gmail.com',
         },
       });
     }
@@ -521,6 +539,169 @@ Deno.serve(async (req: Request) => {
     }
 
     // -----------------------------------------------------------------
+    // Learning Goals (persistent AI memory: what the user wants to master)
+    // -----------------------------------------------------------------
+    if (path === '/goals' && req.method === 'GET') {
+      const goalsData = await loadGoalMastery(supabase, userId);
+      return jsonResponse({ goals: goalsData });
+    }
+
+    if (path === '/goals/generate-subtopics' && req.method === 'POST') {
+      const body = await req.json().catch(() => ({}));
+      const topic = typeof body.topic === 'string' ? body.topic.trim().slice(0, 80) : '';
+      if (!topic) return errorResponse('A topic is required', 400);
+      if (!groqApiKey) return errorResponse('Groq API Key is not configured', 500);
+
+      try {
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqApiKey}` },
+          body: JSON.stringify({
+            model: Deno.env.get('GROQ_MODEL') || 'openai/gpt-oss-120b',
+            messages: [
+              { role: 'system', content: 'You are a curriculum expert. Output ONLY the requested JSON object. No prose, no code fences.' },
+              {
+                role: 'user',
+                content: `A student wants to master the topic "${topic}". Break it into the 4 to 6 most essential subtopics a learner must master, ordered from foundational to advanced. Each subtopic name must be at most 5 words. Return ONLY a JSON object exactly like: {"topic":"<the topic>","subtopics":["<name>","<name>"]}`,
+              },
+            ],
+            temperature: 0.4,
+            max_tokens: 500,
+          }),
+        });
+        if (!res.ok) {
+          const errText = await res.text().catch(() => '');
+          console.error('Groq error (generate-subtopics):', errText.slice(0, 300));
+          return errorResponse(extractGroqErrorMessage(errText), 502);
+        }
+        const data = await res.json();
+        const plan = parseSubtopicPlan(data.choices?.[0]?.message?.content || '', topic);
+        if (!plan || plan.subtopics.length === 0) {
+          return errorResponse('Could not generate subtopics for that topic. Try adding them manually.', 502);
+        }
+        return jsonResponse({ plan });
+      } catch (err: any) {
+        console.error('generate-subtopics failed:', err?.message || err);
+        return errorResponse('Subtopic generation failed. Try again or add subtopics manually.', 502);
+      }
+    }
+
+    if (path === '/goals' && req.method === 'POST') {
+      const body = await req.json().catch(() => ({}));
+      const title = typeof body.title === 'string' ? body.title.trim().slice(0, 80) : '';
+      const source = body.source === 'onboarding' ? 'onboarding' : 'manual';
+      const subtopics: string[] = Array.isArray(body.subtopics)
+        ? body.subtopics
+            .filter((s: any) => typeof s === 'string' && s.trim().length >= 1)
+            .map((s: string) => s.trim().slice(0, 60))
+        : [];
+
+      if (!title) return errorResponse('A topic title is required', 400);
+
+      const slug = slugifyGoalName(title);
+      const { data: existing } = await supabase
+        .from('learning_goals')
+        .select('id')
+        .eq('slug', slug)
+        .maybeSingle();
+      if (existing) return errorResponse(`You already have a goal for "${title}"`, 409);
+
+      const { data: goal, error: goalError } = await supabase
+        .from('learning_goals')
+        .insert({ user_id: userId, title, slug, source })
+        .select()
+        .single();
+      if (goalError || !goal) return errorResponse(goalError?.message || 'Failed to create goal', 500);
+
+      // Persist the reviewed AI subtopic plan (onboarding step 2) if present.
+      if (subtopics.length > 0) {
+        const rows = subtopics.slice(0, MAX_SUBTOPICS_PER_GOAL).map((name, idx) => ({
+          goal_id: goal.id,
+          user_id: userId,
+          name,
+          slug: slugifyGoalName(name),
+          order_index: idx,
+        }));
+        const { error: stError } = await supabase.from('goal_subtopics').insert(rows);
+        if (stError) console.error('goal_subtopics insert failed (non-fatal):', stError.message);
+      }
+
+      // First-login onboarding completed: stamp the flag so the popup does
+      // not reappear for this account (RLS blocks the read-only demo).
+      if (source === 'onboarding') {
+        await supabase
+          .from('user_profiles')
+          .update({ onboarding_completed_at: new Date().toISOString() })
+          .eq('id', userId);
+      }
+
+      const goalsData = await loadGoalMastery(supabase, userId);
+      return jsonResponse({ goal, goals: goalsData }, 201);
+    }
+
+    const goalSubtopicMatch = path.match(/^\/goals\/([a-zA-Z0-9_-]+)\/subtopics\/([a-zA-Z0-9_-]+)$/);
+    if (goalSubtopicMatch && req.method === 'DELETE') {
+      const [, goalId, subtopicId] = goalSubtopicMatch;
+      const { error } = await supabase
+        .from('goal_subtopics')
+        .delete()
+        .eq('id', subtopicId)
+        .eq('goal_id', goalId);
+      if (error) return errorResponse(error.message, 500);
+      return jsonResponse({ success: true });
+    }
+
+    const goalSubtopicsMatch = path.match(/^\/goals\/([a-zA-Z0-9_-]+)\/subtopics$/);
+    if (goalSubtopicsMatch && req.method === 'POST') {
+      const goalId = goalSubtopicsMatch[1];
+      const body = await req.json().catch(() => ({}));
+      const name = typeof body.name === 'string' ? body.name.trim().slice(0, 60) : '';
+      if (!name) return errorResponse('A subtopic name is required', 400);
+
+      const { count } = await supabase
+        .from('goal_subtopics')
+        .select('id', { count: 'exact', head: true })
+        .eq('goal_id', goalId);
+      if ((count ?? 0) >= MAX_SUBTOPICS_PER_GOAL) {
+        return errorResponse(`A goal can have at most ${MAX_SUBTOPICS_PER_GOAL} subtopics`, 400);
+      }
+
+      const { data: goalExists } = await supabase
+        .from('learning_goals')
+        .select('id')
+        .eq('id', goalId)
+        .maybeSingle();
+      if (!goalExists) return errorResponse('Goal not found', 404);
+
+      const { data: subtopic, error } = await supabase
+        .from('goal_subtopics')
+        .insert({ goal_id: goalId, user_id: userId, name, slug: slugifyGoalName(name), order_index: count ?? 0 })
+        .select()
+        .single();
+      if (error) {
+        if ((error as any).code === '23505') return errorResponse('That subtopic already exists on this goal', 409);
+        return errorResponse(error.message, 500);
+      }
+      return jsonResponse({ subtopic }, 201);
+    }
+
+    const goalMatch = path.match(/^\/goals\/([a-zA-Z0-9_-]+)$/);
+    if (goalMatch && req.method === 'DELETE') {
+      const { error } = await supabase.from('learning_goals').delete().eq('id', goalMatch[1]);
+      if (error) return errorResponse(error.message, 500);
+      return jsonResponse({ success: true });
+    }
+
+    if (path === '/onboarding/complete' && req.method === 'POST') {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ onboarding_completed_at: new Date().toISOString() })
+        .eq('id', userId);
+      if (error) return errorResponse(error.message, 500);
+      return jsonResponse({ success: true });
+    }
+
+    // -----------------------------------------------------------------
     // Instructor Sessions Endpoints
     // -----------------------------------------------------------------
     if (path === '/instructor/sessions' && req.method === 'GET') {
@@ -749,8 +930,15 @@ Deno.serve(async (req: Request) => {
       // ---------------------------------------------------------------------
       // Tool-calling agent loop (mirrors the Express server's LangChain agent)
       // ---------------------------------------------------------------------
+      // Persistent learner memory: load the user's mastery goals and inject
+      // them into the system prompt so tool selection is semantic (the model
+      // decides when the conversation touches a goal) rather than keyword-gated.
+      const clientGoals = sanitizeClientGoals(body.clientGoals);
+      const goalMemoryGoals = await fetchGoalsForChat(supabase, userId, clientGoals);
+      const goalMemoryBlock = buildGoalMemoryBlock(goalMemoryGoals);
+
       const chatMessages: any[] = [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: goalMemoryBlock ? `${SYSTEM_PROMPT}\n\n${goalMemoryBlock}` : SYSTEM_PROMPT },
         ...boundedHistory,
         { role: 'user', content: promptForAgent },
       ];
@@ -1064,6 +1252,22 @@ Deno.serve(async (req: Request) => {
                   });
                 }
               }
+            } else if (call.name === 'get_learning_goals') {
+              // Re-read live mastery so the model always quotes fresh numbers.
+              const goalsData = await fetchGoalsForChat(supabase, userId, clientGoals);
+              toolResult = JSON.stringify({
+                action: 'GOALS_RETRIEVED',
+                has_goals: goalsData.length > 0,
+                goals: goalsData.map((g) => ({
+                  title: g.title,
+                  mastery_pct: g.masteryPct,
+                  subtopics: g.subtopics.map((s) => ({ name: s.name, mastery_pct: s.masteryPct })),
+                })),
+                message:
+                  goalsData.length === 0
+                    ? 'The student has not set any learning goals yet.'
+                    : undefined,
+              });
             } else if (call.name === 'get_questions_to_review') {
               const { data: missedQuestions, error } = await supabase
                 .from('question_telemetry')
@@ -1206,6 +1410,67 @@ Deno.serve(async (req: Request) => {
     return errorResponse(err.message || 'Internal Server Error', 500);
   }
 });
+
+// ============================================================================
+// Learning goals — persistent memory plumbing (goals + live mastery)
+// ============================================================================
+
+const READONLY_DEMO_EMAIL = 'judge.pragati@gmail.com';
+
+/**
+ * Loads the user's goals with subtopics and derives mastery from
+ * learner_concept_state (the single source of truth) via computeGoalMastery.
+ */
+async function loadGoalMastery(scopedClient: any, userId: string): Promise<GoalMasteryResult[]> {
+  const { data: goals } = await scopedClient
+    .from('learning_goals')
+    .select('id, title, goal_subtopics(id, name, slug, order_index)')
+    .order('created_at', { ascending: true });
+  if (!goals || goals.length === 0) return [];
+
+  const { data: states } = await scopedClient
+    .from('learner_concept_state')
+    .select('mastery, attempts, concepts(slug, name)')
+    .eq('user_id', userId);
+
+  const learnerStates = (states || []).map((s: any) => ({
+    conceptSlug: (s.concepts as any)?.slug || '',
+    mastery: Number(s.mastery ?? 0),
+    attempts: Number(s.attempts ?? 0),
+  }));
+
+  return goals.map((g: any) => {
+    const subtopics = (g.goal_subtopics || [])
+      .slice()
+      .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
+      .map((s: any) => ({ id: s.id, name: s.name, slug: s.slug }));
+    const result = computeGoalMastery(g.title, subtopics, learnerStates);
+    return { ...result, goalId: g.id };
+  });
+}
+
+/**
+ * Goal list for the chat system prompt. Falls back to sanitized clientGoals
+ * for the read-only demo account (which cannot persist goals server-side).
+ */
+async function fetchGoalsForChat(
+  scopedClient: any,
+  userId: string,
+  clientGoals: Array<{ id: string; title: string; masteryPct: number }>
+): Promise<GoalMasteryResult[]> {
+  try {
+    const goalsData = await loadGoalMastery(scopedClient, userId);
+    if (goalsData.length > 0) return goalsData;
+  } catch (err: any) {
+    console.error('loadGoalMastery failed (chat continues without memory):', err?.message || err);
+  }
+  return clientGoals.map((g) => ({
+    goalId: g.id,
+    title: g.title,
+    masteryPct: g.masteryPct,
+    subtopics: [],
+  }));
+}
 
 // ============================================================================
 // Adaptive learner model — event-to-state conversion and next-action decision

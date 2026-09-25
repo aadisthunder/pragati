@@ -2,6 +2,9 @@ import { z } from 'zod';
 import { tool } from '@langchain/core/tools';
 import { ChatOpenAI } from '@langchain/openai';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { loadGoalMastery } from '../services/goalService.js';
+
+export const getLearningGoalsSchema = z.object({});
 
 export const generateQuizSchema = z.object({
   topic: z.string().min(1, 'Topic is required'),
@@ -477,6 +480,35 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
     }
   );
 
+  const getLearningGoalsTool = tool(
+    async () => {
+      try {
+        // Re-read live mastery so the model always quotes fresh numbers.
+        const goalsData = await loadGoalMastery(supabaseClient, userId);
+        return JSON.stringify({
+          action: 'GOALS_RETRIEVED',
+          has_goals: goalsData.length > 0,
+          goals: goalsData.map((g) => ({
+            title: g.title,
+            mastery_pct: g.masteryPct,
+            subtopics: g.subtopics.map((s) => ({ name: s.name, mastery_pct: s.masteryPct })),
+          })),
+          message: goalsData.length === 0 ? 'The student has not set any learning goals yet.' : undefined,
+        });
+      } catch (err: any) {
+        return JSON.stringify({
+          action: 'ERROR',
+          error: `Error retrieving learning goals: ${err.message}`,
+        });
+      }
+    },
+    {
+      name: 'get_learning_goals',
+      description: "Fetches the student's current learning goals with live mastery percentages per subtopic, so you can reference their progress and offer targeted tests. Takes no arguments.",
+      schema: getLearningGoalsSchema,
+    }
+  );
+
   return [
     generateQuizTool,
     getStudentPerformanceTool,
@@ -484,5 +516,6 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
     getStudentAttemptsTool,
     getAttemptTelemetryTool,
     explainMissedQuestionTool,
+    getLearningGoalsTool,
   ];
 }

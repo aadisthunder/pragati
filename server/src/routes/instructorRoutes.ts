@@ -13,7 +13,7 @@ instructorRouter.post(
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const userId = req.user!.id;
     const token = req.token!;
-    const { message, history, sessionId, imageBase64 } = req.body;
+    const { message, history, sessionId, imageBase64, clientGoals } = req.body;
 
     const validation = validateChatMessage(message);
     if (!validation.valid) {
@@ -71,7 +71,7 @@ instructorRouter.post(
         }
       }
 
-      const result = await processAgentChat(userId, promptForAgent, cleanHistory, token, sendStep);
+      const result = await processAgentChat(userId, promptForAgent, cleanHistory, token, sendStep, clientGoals);
 
     // Save message pair to chat_messages if session exists
     const scopedClient = createScopedClient(token);
