@@ -14,6 +14,8 @@ export const LoginPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const destination = (location.state as any)?.from?.pathname || '/instructor';
+  /** The seeded diagnostic quiz — the judge demo's centerpiece. */
+  const JUDGE_DEMO_QUIZ = '/quizzes/11111111-1111-1111-1111-111111111111';
 
   useEffect(() => {
     if (user) {
@@ -26,9 +28,11 @@ export const LoginPage: React.FC = () => {
       setJudgeLoading(true);
       setError(null);
       await signInAsJudge();
-      navigate(destination);
+      // Route straight into the seeded diagnostic quiz so the adaptive-engine
+      // demo starts within seconds of clicking the button.
+      navigate(JUDGE_DEMO_QUIZ);
     } catch (err: any) {
-      setError(err.message || 'Failed to sign in as Judge');
+      setError(err.message || 'Failed to start the judge demo');
     } finally {
       setJudgeLoading(false);
     }
@@ -103,29 +107,29 @@ export const LoginPage: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-5">
-              {/* Option 1: Hackathon Judge Quick Access (Highlighted Deep Indigo Theme) */}
-              <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-2xl text-center space-y-2.5 shadow-xs">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-100/90 border border-indigo-200 text-indigo-900 text-xs font-bold font-display">
-                  <Award className="w-3.5 h-3.5 text-indigo-600" />
+              {/* Option 1: Hackathon Judge Quick Access (single entry point) */}
+              <div className="p-4 bg-indigo-600/95 border border-indigo-700 rounded-2xl text-center space-y-2.5 shadow-md">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 border border-white/25 text-white text-xs font-bold font-display">
+                  <Award className="w-3.5 h-3.5 text-white" />
                   <span>Hackathon Judge Access</span>
                 </div>
                 <button
                   type="button"
                   onClick={handleJudgeSignIn}
                   disabled={judgeLoading || isSubmitting}
-                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-semibold rounded-xl shadow-xs hover:shadow-md transition-all duration-150 font-display disabled:opacity-60 cursor-pointer"
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white hover:bg-indigo-50 active:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-xl shadow-sm hover:shadow-md transition-all duration-150 font-display disabled:opacity-60 cursor-pointer"
                 >
                   {judgeLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
                   ) : (
                     <>
-                      <span>Instant Judge Login</span>
+                      <span>Instant Judge Access</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </>
                   )}
                 </button>
-                <p className="text-[11px] text-indigo-700/80 font-mono">
-                  1-click demo account (no login credentials required)
+                <p className="text-[11px] text-indigo-100 font-mono">
+                  Seeded learner · take a diagnostic · watch mastery adapt live
                 </p>
               </div>
 

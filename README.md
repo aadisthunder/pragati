@@ -1,141 +1,150 @@
-# Pragati (प्रगति)
+# Pragati (प्रगति) — The AI Tutor That Learns How You Learn
 
 <div align="center">
 
 <img src="client/public/logo.png" alt="Pragati Logo" width="100" height="100" style="border-radius: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);" />
 
-### Your personal AI teacher that makes sure you truly understand a topic — not just memorise it.
-
-**Try it here**: [https://pragati-aadi.web.app](https://pragati-aadi.web.app)
+**Try it here**: [https://pragati-aadi.web.app](https://pragati-aadi.web.app) — or click **"Try the Adaptive Demo"** on the login page.
 
 </div>
 
 ---
 
-Hi! Thanks for checking out my project. 🙂
+## Most AI tutors answer questions. Pragati measures whether you actually learned.
 
-**Pragati** means "progress" in Sanskrit. I built it because of a simple problem we all face while studying — we read something, feel like we understood it, and then forget it in two days. Pragati fixes this with a loop: **learn → get tested → find your weak spots → revise exactly those → repeat until you have fully mastered the topic.**
+Ask ChatGPT to explain derivatives and you'll get a good explanation. But it has no idea whether you can *use* them — and it never finds out.
 
-Think of it as a strict but friendly teacher who never lets a concept slip through the cracks.
+Pragati closes that loop. It builds a **learner model** from your answers, response time, hints, and skipped questions. It finds the concept — and the *prerequisite* concept — that's actually blocking you. Then it chooses the next best learning action, teaches, retests, and **measures whether the intervention worked**.
 
----
+### The core loop
 
-## Table of Contents
+```mermaid
+graph LR
+    A[Learner] --> B[Observe<br/>quiz telemetry]
+    B --> C[Diagnose<br/>mastery + prerequisites]
+    C --> D[Adapt<br/>next best action]
+    D --> E[Teach / Test / Repair]
+    E --> F[Measure<br/>mastery before vs after]
+    F --> A
+```
 
-- [What can Pragati do?](#what-can-pragati-do)
-- [How it works (architecture)](#how-it-works-architecture)
-- [Tech I used](#tech-i-used)
-- [How I kept it secure](#how-i-kept-it-secure)
-- [Run it on your machine](#run-it-on-your-machine)
-- [Running the tests](#running-the-tests)
-- [How to deploy it](#how-to-deploy-it)
-- [For judges and recruiters](#for-judges-and-recruiters)
-- [License](#license)
+### Why Pragati is different
 
----
-
-## What can Pragati do?
-
-### 1. The mastery loop (the main idea)
-
-This is the heart of the app:
-
-1. **Learn any topic** — Talk to the AI teacher. It will not simply hand you the answer. It asks you questions, gives small hints, and builds your understanding step by step, from the basics.
-2. **Take a test when you feel ready** — You decide when you are prepared. The AI makes a fresh test on exactly what you studied. You pick the difficulty (Beginner, Intermediate or Advanced) and the number of questions.
-3. **Get hints during the test** — Stuck on a question? Ask for a hint. It nudges you in the right direction without spoiling the answer.
-4. **See your weak spots** — While you attempt the test, Pragati quietly notes how long you took on each question, how many hints you used, and what you got wrong. From this it finds your exact weak concepts.
-5. **Revise what you got wrong** — The "Questions to Review" page shows every question you missed or skipped. One click, and the AI teacher re-teaches you that exact concept.
-6. **Repeat** — Take the test again, and keep going until you have mastered everything.
-
-### 2. The AI teacher (chat)
-
-- Guides you with questions instead of dumping answers.
-- Answers stream in live, word by word, so you never stare at a blank screen.
-- Handles math beautifully — all equations are properly typeset (you can write `$E = mc^2$` style math and it renders cleanly).
-- You can click a photo of a question from your textbook or notebook, and the AI can read it (works well for handwritten equations and diagrams too).
-- Changed your mind mid-answer? There is a stop button.
-- Your chats are saved as named sessions, so you can come back to them anytime.
-
-### 3. Quiz arena
-
-- The AI creates a quiz on any topic you ask — for example "give me 10 questions on AC circuits, advanced level".
-- Fair play is built in: the correct answer and explanation are removed on the server before the questions reach your browser. No cheating by opening the network tab. 🙂
-- A question palette shows which questions you have attempted, skipped, or not visited yet.
-- One click takes you from any quiz question straight into a teaching session about it.
-
-### 4. Analytics
-
-- Overall accuracy, average time per question, and total practice time.
-- A progress curve that shows how you are improving over time.
-- Topic-wise breakdown so you know which topics need more love.
-- An Elo-style skill rating (like in chess) that goes up or down after every test, depending on the difficulty.
+| | Typical AI tutor | Pragati |
+| :--- | :--- | :--- |
+| Optimizes for | a good response | **demonstrated mastery** |
+| Knows what you know | nothing | per-concept mastery with confidence |
+| When you fail | repeats the same lesson | finds the **root-cause prerequisite** and repairs it |
+| Difficulty | whatever you clicked | adapts automatically, with a stated reason |
+| Proof | none | measurable before → after mastery deltas |
 
 ---
 
-## How it works (architecture)
+## The Adaptive Agent (the core idea)
 
-One important design decision: **the frontend never talks to the database or the AI directly.** Everything goes through a backend. This keeps all the secret keys safely on the server side.
+Pragati's decision core is a **deterministic rule engine** — not another prompt. The same learner evidence always produces the same decision, which makes it testable, evaluable, and impossible for the demo to fail. The LLM generates *content* (lessons, quizzes); it never decides *pedagogy*.
+
+On every quiz submit, the engine:
+
+1. **Updates mastery** per concept from weighted evidence (correctness × response time × hints × skips), with evidence damping and an uncertainty cap for new learners.
+2. **Diagnoses prerequisites** — walks the concept graph upward from a failed concept to find the weakest *root cause* (e.g., "your derivative procedure is failing because **power rule** is at 32%").
+3. **Chooses the next action**: `TEACH_NEW`, `SOCRATIC`, `MICRO_QUIZ`, `RETEACH`, `PREREQUISITE_REPAIR`, `SPACED_REVIEW`, or `CHALLENGE` — with a difficulty level and a one-sentence **"Why this next?"** rationale (no hidden chain-of-thought).
+4. **Schedules spaced review** based on demonstrated retention (1 → 2 → 5 → 10 → 21 day bands).
+5. **Emits a visible agent trace** — structured events only, so you can watch the agent think:
+
+```text
+✓ Observation recorded (2/5 correct)
+✓ Concept mastery updated from quiz evidence
+⚠ Prerequisite weakness detected: Power Rule
+→ Selected prerequisite repair
+→ Next: restore Power Rule above 70%, then retest derivative application
+```
+
+After the diagnostic quiz in the demo, the results screen shows mastery bars moving **before → after** per concept, the chosen next action with its rationale, and the full trace.
+
+---
+
+## Measured adaptation accuracy
+
+All metrics below are produced by the deterministic evaluation harness
+(`server/src/__tests__/masteryEvaluation.test.ts`) — **run `npm --prefix server test` to reproduce them.** No number on this page is invented.
+
+```text
+Scenarios: 30        Adaptation accuracy: 100%
+
+hidden prerequisite   4/4     repeated failure   2/2     repeated success  2/2
+slow correct          1/1     fast correct       2/2     hint dependency   2/2
+spaced review         3/3     obvious weakness   2/2     difficulty adap.  5/5
+```
+
+The harness covers the cases that matter: hidden prerequisite failures, hint-reliant "high scorers" who haven't actually mastered anything, slow-but-correct fluency gaps, and difficulty transitions.
+
+---
+
+## What else is in the box
+
+- **Socratic AI tutor** — guides with questions instead of dumping answers; streams live; handles LaTeX math and photos of handwritten problems (OCR).
+- **Quiz arena** — AI-generated quizzes on any topic, hints during the test, question palette, per-question telemetry captured client-side.
+- **Anti-cheating by design** — correct answers and explanations are stripped on the server before questions reach the browser.
+- **Analytics** — concept mastery map, topic breakdowns, accuracy progression curve, Elo-style skill rating, due-review counts.
+- **Judge Mode** — seeded, deterministic demo (below).
+
+---
+
+## Architecture
+
+One important design decision: **the frontend never talks to the database or the AI directly.** Everything goes through the backend. The adaptive engine is a pure TypeScript module shared by the Edge Function and the test suite.
 
 ```mermaid
 graph TD
     subgraph Client ["Frontend (React + Vite)"]
-        UI["User Interface"]
-        Auth["Login (JWT session)"]
+        UI["Dashboard / Tutor / Quiz Arena"]
+        Results["Adaptive results view"]
     end
 
-    subgraph Backend ["Backend (Supabase Edge Function)"]
+    subgraph Edge ["Supabase Edge Function (Deno)"]
         Router["API Routes (/api/*)"]
-        Agent["AI Agent + Tools"]
+        Agent["AI Agent + Tools (Groq)"]
+        Adapt["Adaptive Engine<br/>(mastery.ts — deterministic)"]
     end
 
-    subgraph External ["Cloud services"]
-        Groq["Groq (AI models)"]
-        SupaAuth["Supabase Auth"]
-        SupaDB[("Supabase PostgreSQL")]
+    subgraph Data ["Supabase"]
+        DB[("PostgreSQL + RLS")]
+        Auth["Supabase Auth"]
     end
 
-    UI --> Auth
-    Auth -->|"Bearer token"| Router
-    Router --> SupaDB
+    subgraph Model ["Learner model tables"]
+        C["concepts + prerequisites"]
+        L["learner_concept_state"]
+        E["learning_events"]
+    end
+
+    UI -->|"Bearer token"| Router
     Router --> Agent
-    Agent --> Groq
-    Auth -.-> SupaAuth
+    Agent --> Groq["Groq (AI models)"]
+    Router --> Adapt
+    Adapt --> C & L & E
+    Router --> DB
+    Results -->|"mastery deltas + next action"| UI
+    Auth -.-> Client
 ```
 
-In simple words:
+**Learner model schema:** `concepts` → `concept_prerequisites` (the graph) → `question_concepts` (tagging) → `learner_concept_state` (mastery, confidence, attempts, response time, next review) → `learning_events` (every mastery transition, so interventions can be evaluated).
 
-1. You log in using Google or an email magic link (handled by Supabase Auth).
-2. The app sends all its requests to the backend with your login token.
-3. The backend checks your token, then talks to the database and the AI on your behalf.
-4. The database has **Row Level Security** switched on — which means even inside the database, you can only ever see your own data.
+**Security model:** every table has Row-Level Security scoped to `auth.uid()`; the learner-state tables follow the same owner-only pattern. The service role is used *only* to upsert shared reference data (the concept taxonomy), never learner data.
 
 ---
 
-## Tech I used
+## For judges and recruiters
 
-| Part | What it does | Built with |
-| :--- | :--- | :--- |
-| Frontend | The app you see and use | React 18, TypeScript, Vite, Tailwind CSS |
-| Backend | The brain that handles all requests | Supabase Edge Function (Deno) |
-| Database | Stores your quizzes, answers, progress | Supabase PostgreSQL |
-| Login | Google sign-in and email magic links | Supabase Auth |
-| AI | The teacher and quiz generator | Groq (fast AI inference) |
-| Hosting | Where the app lives | Firebase Hosting |
-| Math rendering | Pretty equations | KaTeX |
-| Charts | Analytics graphs | Recharts |
+If you are evaluating this project (thank you!), there is no need to sign up:
 
----
+1. Open [https://pragati-aadi.web.app](https://pragati-aadi.web.app)
+2. Click **"Try the Adaptive Demo"** — you land directly in a seeded diagnostic quiz with a learner profile that already has gaps (Functions 88% · Power Rule 32% · Derivatives 47%).
 
-## How I kept it secure
+**The 90-second tour:** take the quiz (guessing wrong on derivative questions is fine — the engine needs the evidence) → watch concept mastery update on the results screen → see the engine diagnose the weak *prerequisite* and choose **prerequisite repair** → follow "Do it now with AI" into the targeted micro-lesson → check the Concept Mastery Map in Analytics.
 
-A few things I took care of (in plain words):
-
-- **Your data is yours only.** Every table in the database has Row Level Security, so one user can never see another user's data — not even by writing their own API calls.
-- **No secret keys in the browser.** The AI key and database keys live only on the backend. Only the public key (which is meant to be public) reaches the browser.
-- **Rate limiting.** If someone tries to spam the AI with hundreds of requests, the backend slows them down. This also protects the free-tier AI quota.
-- **No cheating in quizzes.** Correct answers and explanations are stripped out on the server before questions are sent to the browser.
-- **Size limits on uploads.** So nobody can crash the server with a giant file.
-- **Safe inputs.** Everything the user sends is checked and cleaned before use.
+There is also a read-only **"Instant Judge Login"** with pre-loaded quiz history and analytics. The adaptive demo account is writable (so the engine can respond to *your* answers); it contains only disposable seed data. Every evaluation number in this README is reproducible from the test suite — see [`docs/AI_DISCLOSURE.md`](docs/AI_DISCLOSURE.md) for how AI tools were used in building this.
 
 ---
 
@@ -194,6 +203,8 @@ Leave `VITE_API_URL` empty — in local development the app automatically sends 
 
 Open your Supabase dashboard, go to the **SQL Editor**, paste the contents of [`supabase/schema.sql`](supabase/schema.sql) from this repo, and run it. This creates all the tables, security rules, and triggers in one go.
 
+To seed the judge demo (writable demo account + Calculus concept graph + the deterministic diagnostic quiz), also run [`supabase/seed/judge-demo.sql`](supabase/seed/judge-demo.sql).
+
 ### Step 5: Install and run
 
 ```bash
@@ -207,13 +218,13 @@ npm run dev:server
 npm run dev:client
 ```
 
-Now open [http://localhost:5173](http://localhost:5173) in your browser. That's it! 🎉
+Now open [http://localhost:5173](http://localhost:5173) in your browser. That's it!
 
 ---
 
 ## Running the tests
 
-The project has tests for the tricky parts — math rendering, quiz logic, AI input cleaning, and more:
+The project has tests for the tricky parts — the adaptive decision core, the 30-scenario evaluation harness, quiz logic, AI input cleaning, math rendering, and more:
 
 ```bash
 npm test
@@ -222,9 +233,11 @@ npm test
 Or run them separately:
 
 ```bash
-cd server && npm test   # backend tests
+cd server && npm test   # backend + adaptive-engine + evaluation tests
 cd client && npm test   # frontend tests
 ```
+
+The evaluation summary prints the measured adaptation metrics shown above.
 
 To check that a production build works:
 
@@ -268,11 +281,14 @@ supabase functions deploy api --project-ref <your-supabase-project-ref>
 
 # give the function its secret keys
 supabase secrets set GROQ_API_KEY=gsk_your_key_here --project-ref <your-supabase-project-ref>
+supabase secrets set SUPABASE_SERVICE_ROLE_KEY=your_service_role_key --project-ref <your-supabase-project-ref>
 ```
+
+(`SUPABASE_SERVICE_ROLE_KEY` is optional but recommended — the Edge Function uses it only to upsert the shared concept taxonomy; without it the app still works and falls back to keyword-based concept matching.)
 
 ### Part 3: The Supabase login settings (do not skip!)
 
-This one bit me during deployment, so learn from my mistake 🙂 — if you skip it, Google sign-in will silently redirect you to `localhost` instead of your live site.
+This one bit me during deployment, so learn from my mistake — if you skip it, Google sign-in will silently redirect you to `localhost` instead of your live site.
 
 In your Supabase dashboard, go to **Authentication → URL Configuration** and set:
 
@@ -292,17 +308,37 @@ If you prefer a normal Node.js server instead of an Edge Function, the `server/`
 
 ---
 
-## For judges and recruiters
+## How I kept it secure
 
-If you are evaluating this project (thank you!), there is no need to sign up:
+A few things I took care of (in plain words):
 
-1. Open [https://pragati-aadi.web.app](https://pragati-aadi.web.app)
-2. On the login page, click **"Instant Judge Login"**
+- **Your data is yours only.** Every table in the database has Row Level Security, so one user can never see another user's data — not even by writing their own API calls. The new learner-model tables follow the same owner-only pattern.
+- **No secret keys in the browser.** The AI key and database keys live only on the backend. Only the public key (which is meant to be public) reaches the browser.
+- **Rate limiting.** If someone tries to spam the AI with hundreds of requests, the backend slows them down. This also protects the free-tier AI quota.
+- **No cheating in quizzes.** Correct answers and explanations are stripped out on the server before questions are sent to the browser.
+- **Size limits on uploads.** So nobody can crash the server with a giant file.
+- **Safe inputs.** Everything the user sends is checked and cleaned before use.
+- **A honest demo account.** The writable adaptive-demo account contains only disposable seed data, and the read-only judge account is locked down by database policies.
 
-You will be logged in immediately with pre-loaded quiz history, telemetry data, and analytics — so you can see the full experience without an OTP or Google account. This account is **read-only** (protected by database rules), so exploring it can never spoil real student data.
+---
+
+## Tech I used
+
+| Part | What it does | Built with |
+| :--- | :--- | :--- |
+| Frontend | The app you see and use | React 18, TypeScript, Vite, Tailwind CSS |
+| Backend | The brain that handles all requests | Supabase Edge Function (Deno) |
+| Adaptive engine | The deterministic decision core | Pure TypeScript (shared by backend + tests) |
+| Database | Stores your quizzes, answers, progress, learner model | Supabase PostgreSQL |
+| Login | Google sign-in and email magic links | Supabase Auth |
+| AI | The teacher and quiz generator | Groq (fast AI inference) |
+| Hosting | Where the app lives | Firebase Hosting |
+| Math rendering | Pretty equations | KaTeX |
+| Charts | Analytics graphs | Recharts |
+| Testing | Decision-core + evaluation harness + app logic | Vitest, Supertest |
 
 ---
 
 ## License
 
-This project is open source under the [MIT License](LICENSE). Feel free to learn from it, fork it, and build your own thing. If it helped you, a star on the repo would make my day. ⭐
+This project is open source under the [MIT License](LICENSE). Feel free to learn from it, fork it, and build your own thing. If it helped you, a star on the repo would make my day.

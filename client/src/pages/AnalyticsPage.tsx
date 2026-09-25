@@ -23,6 +23,8 @@ import {
   Loader2,
   BookOpen,
   Trash2,
+  Brain,
+  RefreshCw,
 } from 'lucide-react';
 import { buildTutorMissedPrompt } from '../utils/markdownCards';
 import {
@@ -263,6 +265,53 @@ export const AnalyticsPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Adaptive Learner Model: Concept Mastery Map */}
+      {(data?.concept_mastery || []).length > 0 && (
+        <div className={`${getPermanentCardClass()} p-4 sm:p-6 space-y-4 min-w-0 overflow-hidden`}>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h3 className="text-base font-display font-bold text-slate-900 flex items-center gap-2">
+              <Brain className="w-4 h-4 text-indigo-600" />
+              <span>Concept Mastery Map</span>
+            </h3>
+            <div className="flex items-center gap-2">
+              {(metrics?.due_reviews || 0) > 0 && (
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
+                  <RefreshCw className="w-3 h-3" />
+                  <span>{metrics.due_reviews} due for review</span>
+                </span>
+              )}
+              <span className="text-xs font-mono font-semibold text-slate-400">Learner model</span>
+            </div>
+          </div>
+
+          <div className="space-y-2.5">
+            {data.concept_mastery.map((c: any) => {
+              const barColor =
+                c.mastery_pct >= 80 ? 'bg-emerald-500' : c.mastery_pct >= 60 ? 'bg-slate-800' : c.mastery_pct >= 40 ? 'bg-amber-500' : 'bg-rose-500';
+              return (
+                <div key={c.slug} className="flex items-center gap-3">
+                  <span className="w-32 sm:w-44 shrink-0 text-xs font-semibold text-slate-700 truncate" title={`${c.concept} · ${c.topic}`}>
+                    {c.concept}
+                  </span>
+                  <div className="flex-1 h-3 rounded-full bg-slate-100 border border-slate-200 overflow-hidden min-w-0">
+                    <div
+                      className={`h-full rounded-full ${barColor} transition-all duration-700`}
+                      style={{ width: `${Math.max(3, c.mastery_pct)}%` }}
+                    />
+                  </div>
+                  <span className="w-20 shrink-0 text-right text-[11px] font-mono font-bold text-slate-600">
+                    {c.mastery_pct}%{c.due ? ' · due' : ''}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-[11px] text-slate-400">
+            Built from per-question telemetry: correctness, response time, hints, and skips update each concept's mastery after every attempt.
+          </p>
+        </div>
+      )}
 
       {/* Topic Mastery Animated Bar Chart & Missed Questions Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-w-0">

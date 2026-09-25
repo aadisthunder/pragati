@@ -19,6 +19,7 @@ interface AuthContextType {
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   signInWithEmailOtp: (email: string) => Promise<{ error?: string }>;
+  /** Single judge entry: signs into the writable seeded demo account. */
   signInAsJudge: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -27,13 +28,15 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 /**
- * Demo judge credentials are sourced from env so they can be rotated (or pointed at a
- * disposable demo account) without a code change. NOTE: anything in the client bundle is
- * public — the real protection for the demo account must come from Supabase RLS
- * (see supabase/schema.sql for a read-only demo-account policy).
+ * Judge demo credentials are sourced from env so they can be rotated (or
+ * pointed at a disposable demo account) without a code change. This is the
+ * WRITABLE seeded adaptive-demo account (supabase/seed/judge-demo.sql) — it
+ * can take the seeded diagnostic quiz so judges see mastery adapt live.
+ * NOTE: anything in the client bundle is public — the demo account is
+ * disposable by design and contains only seed data.
  */
-const DEMO_JUDGE_EMAIL = import.meta.env.VITE_DEMO_JUDGE_EMAIL || 'judge.pragati@gmail.com';
-const DEMO_JUDGE_PASSWORD = import.meta.env.VITE_DEMO_JUDGE_PASSWORD || 'JudgeDemoPassword2026!';
+const DEMO_JUDGE_EMAIL = import.meta.env.VITE_JUDGE_DEMO_EMAIL || 'judge.demo@pragati.app';
+const DEMO_JUDGE_PASSWORD = import.meta.env.VITE_JUDGE_DEMO_PASSWORD || 'PragatiJudgeDemo2026!';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);

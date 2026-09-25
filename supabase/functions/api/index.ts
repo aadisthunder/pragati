@@ -7,7 +7,30 @@ import {
   buildQuizGenerationPrompt,
   containsQuizSpoilers,
   buildQuizReadyFallback,
+  stripEmojis,
+  extractGroqErrorMessage,
+  normalizeConceptTags,
+  KNOWN_CONCEPTS,
+  slugifyConceptName,
 } from './_shared/agent-tools.ts';
+import {
+  updateMastery,
+  diagnosePrerequisite,
+  chooseNextAction,
+  nextReviewAt,
+  buildAgentTrace,
+  type ConceptGraph,
+  type PrerequisiteDiagnosis,
+  type AdaptiveDecision,
+  type TraceEvent,
+} from './_shared/mastery.ts';
+import {
+  buildQuestionToSlugs,
+  mergeLearnerStates,
+  buildLearningEventRow,
+  buildAssessedInputs,
+  type ConceptEvidenceInput,
+} from './_shared/adaptiveLoop.ts';
 
 const allowedOrigins = [
   'https://pragati-aadi.web.app',
@@ -102,6 +125,17 @@ Deno.serve(async (req: Request) => {
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: { Authorization: `Bearer ${token}` } },
   });
+
+  // Service client for shared reference data only (concepts, graph edges).
+  // RLS keeps concepts/concept_prerequisites read-only for users; seeding is a
+  // trusted server-side operation, not a user capability. All learner-owned
+  // tables continue to use the scoped client so RLS remains the enforcement layer.
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  const serviceClient = serviceKey
+    ? createClient(supabaseUrl, serviceKey, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      })
+    : null;
 
   // Verify user
   const { data: { user }, error: authError } = await supabase.auth.getUser(token);
@@ -249,6 +283,8 @@ Deno.serve(async (req: Request) => {
           prompt: q.prompt,
         });
       }
+      // The attempt id does not exist until the attempt row is inserted below;
+      // it is threaded into the adaptive loop explicitly after creation.
 
       const totalQuestions = answers.length;
       const accuracyPct = totalQuestions > 0 ? Number(((correctCount / totalQuestions) * 100).toFixed(1)) : 0;
@@ -301,6 +337,24 @@ Deno.serve(async (req: Request) => {
         .update({ skill_rating: newRating, updated_at: new Date().toISOString() })
         .eq('id', userId);
 
+      // Adaptive learner model: convert quiz evidence into concept mastery,
+      // then decide the next best action. Pure functions from _shared/mastery.ts
+      // — deterministic, no LLM in the decision loop. Adaptation must never
+      // fail the submit: on any error the response degrades to the legacy shape.
+      let adaptation: Awaited<ReturnType<typeof runAdaptiveLoop>> = null;
+      try {
+        adaptation = await runAdaptiveLoop(
+          supabase,
+          serviceClient,
+          userId,
+          quizId,
+          evaluatedTelemetry,
+          attempt.id
+        );
+      } catch (adaptErr: any) {
+        console.error('Adaptive loop failed (non-fatal):', adaptErr?.message || adaptErr);
+      }
+
       return jsonResponse({
         attempt_id: attempt.id,
         summary: {
@@ -313,6 +367,14 @@ Deno.serve(async (req: Request) => {
           rating_change: ratingChange,
         },
         results: evaluatedTelemetry,
+        ...(adaptation
+          ? {
+              nextStep: adaptation.decision,
+              masteryDeltas: adaptation.masteryDeltas,
+              trace: adaptation.trace,
+              currentDifficulty: adaptation.currentDifficulty,
+            }
+          : {}),
       });
     }
 
@@ -385,6 +447,30 @@ Deno.serve(async (req: Request) => {
         is_skipped: m.is_skipped,
       }));
 
+      // Adaptive learner model: concept-level mastery map + due reviews.
+      const nowIso = new Date().toISOString();
+      const { data: conceptStates } = await supabase
+        .from('learner_concept_state')
+        .select('mastery, attempts, last_seen_at, next_review_at, concepts(name, slug, topic)')
+        .eq('user_id', userId)
+        .order('mastery', { ascending: true })
+        .limit(30);
+
+      const conceptMastery = (conceptStates || [])
+        .filter((s: any) => (s.concepts as any)?.name)
+        .map((s: any) => ({
+          concept: (s.concepts as any).name,
+          slug: (s.concepts as any).slug,
+          topic: (s.concepts as any).topic || 'General',
+          mastery_pct: Math.round(Number(s.mastery ?? 0) * 100),
+          attempts: Number(s.attempts ?? 0),
+          last_seen_at: s.last_seen_at,
+          next_review_at: s.next_review_at,
+          due: Boolean(s.next_review_at && s.next_review_at <= nowIso),
+        }));
+
+      const dueReviews = conceptMastery.filter((c: any) => c.due).length;
+
       return jsonResponse({
         profile: {
           email: user.email,
@@ -399,8 +485,10 @@ Deno.serve(async (req: Request) => {
           overall_accuracy: overallAccuracy,
           avg_dwell_time_sec: avgDwellTimeSec,
           total_time_spent_min: Math.round(totalTimeSec / 60),
+          due_reviews: dueReviews,
         },
         topic_mastery: topicMastery,
+        concept_mastery: conceptMastery,
         recent_attempts: attemptsList.slice(-10),
         missed_questions: formattedMissed,
       });
@@ -692,8 +780,10 @@ Deno.serve(async (req: Request) => {
 
         const res = await callGroq(chatMessages, true);
         if (!res.ok) {
+          // Friendly message to the user; log the raw error server-side for debugging
           const errText = await res.text();
-          return errorResponse(`Groq API Error: ${errText}`, res.status);
+          console.error('Groq error (agent turn):', errText.slice(0, 500));
+          return errorResponse(extractGroqErrorMessage(errText), 502);
         }
         const data = await res.json();
         assistantMessage = data.choices?.[0]?.message;
@@ -734,6 +824,9 @@ Deno.serve(async (req: Request) => {
                 : [];
 
               if (parsed && questionsList.length > 0) {
+                // Normalize/backfill per-question concept tags before persisting
+                normalizeConceptTags(parsed, parsed.topic || args.topic);
+
                 // 2) Persist quiz + questions with Row Level Security intact
                 const { data: quizRow, error: quizError } = await supabase
                   .from('quizzes')
@@ -762,9 +855,68 @@ Deno.serve(async (req: Request) => {
                     order_index: idx,
                   }));
 
-                  const { error: questionsError } = await supabase
+                  const { data: questionRows, error: questionsError } = await supabase
                     .from('questions')
-                    .insert(questionsToInsert);
+                    .insert(questionsToInsert)
+                    .select('id, order_index');
+
+                  // Persist question->concept mappings so the adaptive loop can
+                  // attribute evidence without re-running the LLM. The concepts
+                  // upsert needs the service client; skip tagging if unavailable
+                  // (quiz still works, adaptation falls back to keyword matching).
+                  let mappingsError: string | null = null;
+                  if (serviceClient && questionRows && !questionsError) {
+                    const orderToId = new Map<number, string>();
+                    for (const r of questionRows) orderToId.set(r.order_index, r.id);
+
+                    // Ensure all tagged concepts exist (upsert by topic,slug).
+                    const tagSlugs = new Map<string, { name: string; prerequisites: string[] }>();
+                    for (const q of questionsList) {
+                      for (const tag of q.concepts || []) {
+                        tagSlugs.set(tag.slug, { name: tag.name, prerequisites: tag.prerequisites || [] });
+                      }
+                    }
+                    const { data: conceptIdRows, error: conceptsError } = await serviceClient
+                      .from('concepts')
+                      .upsert(
+                        Array.from(tagSlugs.entries()).map(([slug, v]) => ({
+                          topic: quizRow.topic,
+                          slug,
+                          name: v.name,
+                          description: '',
+                        })),
+                        { onConflict: 'topic,slug' }
+                      )
+                      .select('id, slug');
+
+                    if (conceptsError) {
+                      mappingsError = conceptsError.message;
+                    } else {
+                      const conceptIdBySlug = new Map<string, string>();
+                      for (const c of conceptIdRows || []) conceptIdBySlug.set(c.slug, c.id);
+
+                      const mappingRows: any[] = [];
+                      for (let i = 0; i < questionsList.length; i++) {
+                        const questionId = orderToId.get(i);
+                        if (!questionId) continue;
+                        for (const tag of questionsList[i].concepts || []) {
+                          const conceptId = conceptIdBySlug.get(tag.slug);
+                          if (conceptId) {
+                            mappingRows.push({ question_id: questionId, concept_id: conceptId, weight: 1.0 });
+                          }
+                        }
+                      }
+                      if (mappingRows.length > 0) {
+                        const { error: mapErr } = await serviceClient
+                          .from('question_concepts')
+                          .upsert(mappingRows, { onConflict: 'question_id,concept_id', ignoreDuplicates: true });
+                        if (mapErr) mappingsError = mapErr.message;
+                      }
+                    }
+                  }
+                  if (mappingsError) {
+                    console.error('Concept mapping persist failed (non-fatal):', mappingsError);
+                  }
 
                   toolResult = questionsError
                     ? JSON.stringify({
@@ -973,7 +1125,7 @@ Deno.serve(async (req: Request) => {
       }
 
       const rawReply = assistantMessage?.content || 'I could not process your request at this moment.';
-      let cleanReply = String(rawReply).replace(/<[\s\S]*?<\/think>/gi, '').trim();
+      let cleanReply = stripEmojis(String(rawReply).replace(/<[\s\S]*?<\/think>/gi, '').trim());
 
       // If generate_quiz ran, never let question text leak into chat prose
       const quizGenExec = toolExecutions.find((t) => t.name === 'generate_quiz');
@@ -985,7 +1137,9 @@ Deno.serve(async (req: Request) => {
           // result is not JSON — treat as generic success path below
         }
         if (resObj?.action === 'ERROR') {
-          cleanReply = `I ran into a problem while creating that quiz: ${resObj.error}. Want me to try again with a different topic or difficulty?`;
+          cleanReply = stripEmojis(
+            `I ran into a problem while creating that quiz: ${resObj.error}. Want me to try again with a different topic or difficulty?`
+          );
         } else {
           const topic = resObj?.topic || 'the requested topic';
           if (!cleanReply || containsQuizSpoilers(cleanReply)) {
@@ -1052,3 +1206,312 @@ Deno.serve(async (req: Request) => {
     return errorResponse(err.message || 'Internal Server Error', 500);
   }
 });
+
+// ============================================================================
+// Adaptive learner model — event-to-state conversion and next-action decision
+// ============================================================================
+
+interface MasteryDelta {
+  conceptSlug: string;
+  conceptName: string;
+  before: number;
+  after: number;
+  nextReviewAt: string | null;
+}
+
+interface AdaptiveLoopResult {
+  decision: AdaptiveDecision;
+  masteryDeltas: MasteryDelta[];
+  trace: TraceEvent[];
+  /** Difficulty label the quiz was taken at (for the transition display). */
+  currentDifficulty: string;
+}
+
+/**
+ * Builds the concept graph for a quiz from the seeded taxonomy, persisting any
+ * newly seen concepts so learner_concept_state always has valid concept rows to
+ * reference. Ensures the union of taxonomy concepts matching the topic text OR
+ * any question text, plus the topic itself as a fallback concept.
+ */
+async function ensureConceptsSeeded(
+  serviceClient: any | null,
+  scopedClient: any,
+  topic: string,
+  searchTexts: string[] = []
+): Promise<ConceptGraph> {
+  const bySlug: ConceptGraph['bySlug'] = {};
+
+  const lowerTopic = String(topic || '').toLowerCase();
+  const lowerTexts = searchTexts.map((t) => String(t || '').toLowerCase());
+  const taxonomy = KNOWN_CONCEPTS.filter(
+    (c) =>
+      lowerTopic.includes(c.topic.toLowerCase()) ||
+      c.keywords.some((k) => lowerTopic.includes(k)) ||
+      lowerTexts.some((t) => c.keywords.some((k) => t.includes(k)))
+  );
+
+  const conceptsToEnsure =
+    taxonomy.length > 0
+      ? taxonomy.map((c) => ({ name: c.name, slug: c.slug, topic: c.topic, prerequisites: c.prerequisites }))
+      : [{ name: topic || 'General', slug: slugifyConceptName(topic || 'General'), topic: topic || 'General', prerequisites: [] }];
+
+  for (const c of conceptsToEnsure) {
+    let conceptId: string | null = null;
+
+    // Service client can upsert shared reference data; otherwise look up only.
+    if (serviceClient) {
+      const { data, error } = await serviceClient
+        .from('concepts')
+        .upsert(
+          { topic: c.topic, name: c.name, slug: c.slug, description: '' },
+          { onConflict: 'topic,slug' }
+        )
+        .select('id, name, slug')
+        .maybeSingle();
+      if (!error && data) conceptId = data.id;
+    }
+
+    if (!conceptId) {
+      const { data } = await scopedClient
+        .from('concepts')
+        .select('id, name, slug')
+        .eq('topic', c.topic)
+        .eq('slug', c.slug)
+        .maybeSingle();
+      if (data) conceptId = data.id;
+    }
+
+    if (conceptId) {
+      bySlug[c.slug] = { id: conceptId, name: c.name, slug: c.slug, prerequisites: c.prerequisites };
+    }
+  }
+
+  // Persist prerequisite edges for any concepts we just ensured.
+  if (serviceClient) {
+    for (const slug of Object.keys(bySlug)) {
+      const node = bySlug[slug];
+      for (const preSlug of node.prerequisites) {
+        const pre = bySlug[preSlug];
+        if (!pre) continue;
+        await serviceClient.from('concept_prerequisites').upsert(
+          { concept_id: node.id, prerequisite_id: pre.id },
+          { onConflict: 'concept_id,prerequisite_id', ignoreDuplicates: true }
+        );
+      }
+    }
+  }
+
+  return { bySlug };
+}
+
+/**
+ * The adaptive loop: quiz evidence -> concept mastery -> prerequisite
+ * diagnosis -> next best action -> review scheduling -> learning events.
+ * Deterministic; the LLM is never asked to decide pedagogy.
+ */
+async function runAdaptiveLoop(
+  scopedClient: any,
+  serviceClient: any | null,
+  userId: string,
+  quizId: string,
+  telemetry: any[],
+  attemptId: string
+): Promise<AdaptiveLoopResult | null> {
+  if (!telemetry || telemetry.length === 0) return null;
+
+  // 1. Load the quiz (for topic) and question->concept tags. Seeded judge
+  //    quizzes carry explicit mappings; generated quizzes fall back to tags
+  //    embedded at generation time or keyword matching.
+  const { data: quizRow } = await scopedClient
+    .from('quizzes')
+    .select('topic, difficulty')
+    .eq('id', quizId)
+    .maybeSingle();
+  const topic = quizRow?.topic || 'General';
+  const quizDifficulty = quizRow?.difficulty || 'intermediate';
+
+  const questionIds = telemetry.map((t) => t.question_id);
+  const { data: mappings } = await scopedClient
+    .from('question_concepts')
+    .select('question_id, concept_id, weight, concepts(name, slug)')
+    .in('question_id', questionIds);
+
+  const conceptGraph = await ensureConceptsSeeded(
+    serviceClient,
+    scopedClient,
+    topic,
+    telemetry.map((t) => t.prompt || '')
+  );
+
+  // 2. Attribute each question to concepts (pure; precedence: DB mappings >
+  //    embedded generation tags > keyword match > topic fallback).
+  const questionToSlugs = buildQuestionToSlugs(mappings, telemetry, topic);
+  const touchedSlugs = Array.from(new Set(Array.from(questionToSlugs.values()).flat()));
+  if (touchedSlugs.length === 0) return null;
+
+  // 3. Load existing learner state for touched concepts.
+  const touchedSlugs = Array.from(new Set(Array.from(questionToSlugs.values()).flat()));
+  const { data: conceptRows } = await scopedClient
+    .from('concepts')
+    .select('id, name, slug')
+    .in('slug', touchedSlugs);
+  const slugToId = new Map<string, string>();
+  const slugToName = new Map<string, string>();
+  for (const row of conceptRows || []) {
+    slugToId.set(row.slug, row.id);
+    slugToName.set(row.slug, row.name);
+  }
+
+  const { data: existingStates } = await scopedClient
+    .from('learner_concept_state')
+    .select('*')
+    .eq('user_id', userId)
+    .in('concept_id', Array.from(slugToId.values()));
+
+  const stateBySlug = new Map<string, any>();
+  for (const s of existingStates || []) {
+    const slug = Array.from(slugToId.entries()).find(([, id]) => id === s.concept_id)?.[0];
+    if (slug) stateBySlug.set(slug, s);
+  }
+
+  // 4. Compute evidence once per concept (single source of truth), then
+  //    update mastery and persist per concept.
+  const evidenceBySlug: Record<string, ConceptEvidenceInput[]> = {};
+  for (const t of telemetry) {
+    for (const slug of questionToSlugs.get(t.question_id) || []) {
+      (evidenceBySlug[slug] ??= []).push({
+        correct: Boolean(t.is_correct),
+        skipped: Boolean(t.is_skipped),
+        dwellTimeSec: Number(t.dwell_time_sec) || 0,
+        hintsUsed: Number(t.hints_used) || 0,
+      });
+    }
+  }
+
+  const masteryDeltas: MasteryDelta[] = [];
+  const updates: Array<{ slug: string; updated: ReturnType<typeof updateMastery> }> = [];
+  const now = new Date();
+  const nowIso = now.toISOString();
+
+  for (const slug of touchedSlugs) {
+    const conceptId = slugToId.get(slug);
+    const evidence = evidenceBySlug[slug] || [];
+    if (!conceptId || evidence.length === 0) continue;
+
+    const prevRow = stateBySlug.get(slug);
+    const prevState: LearnerConceptState | null = prevRow
+      ? {
+          conceptSlug: slug,
+          mastery: Number(prevRow.mastery ?? 0.5),
+          attempts: Number(prevRow.attempts ?? 0),
+          correct: Number(prevRow.correct ?? 0),
+          incorrect: Number(prevRow.incorrect ?? 0),
+          hintsUsed: Number(prevRow.hints_used ?? 0),
+          avgResponseTimeSec: Number(prevRow.avg_response_time_sec ?? 0),
+        }
+      : null;
+
+    const updated = updateMastery(prevState, evidence);
+    const beforeMastery = prevState ? prevState.mastery : 0.5;
+    const reviewAt = nextReviewAt(updated.mastery, now);
+
+    // Upsert learner state (scoped client — RLS enforces ownership).
+    const { error: upsertError } = await scopedClient.from('learner_concept_state').upsert(
+      {
+        user_id: userId,
+        concept_id: conceptId,
+        mastery: updated.mastery,
+        confidence: Math.max(0, 1 - Math.min(1, updated.hintsUsed / Math.max(1, updated.attempts * 2))),
+        attempts: updated.attempts,
+        correct: updated.correct,
+        incorrect: updated.incorrect,
+        avg_response_time_sec: updated.avgResponseTimeSec,
+        hints_used: updated.hintsUsed,
+        last_seen_at: now.toISOString(),
+        next_review_at: reviewAt.toISOString(),
+        updated_at: now.toISOString(),
+      },
+      { onConflict: 'user_id,concept_id' }
+    );
+    if (upsertError) {
+      console.error(`learner_concept_state upsert failed for ${slug}:`, upsertError.message);
+      continue;
+    }
+
+    // attemptId comes from the caller (the created attempt row) — never a
+    // best-effort read off telemetry, which does not carry it.
+    await scopedClient.from('learning_events').insert(
+      buildLearningEventRow({
+        userId,
+        conceptId,
+        attemptId,
+        eventType: 'quiz_evidence',
+        beforeMastery,
+        afterMastery: updated.mastery,
+        questionCount: evidence.length,
+        hintsUsed: updated.hintsUsed,
+      })
+    );
+
+    updates.push({ slug, updated });
+    masteryDeltas.push({
+      conceptSlug: slug,
+      conceptName: slugToName.get(slug) || slug,
+      before: beforeMastery,
+      after: updated.mastery,
+      nextReviewAt: reviewAt.toISOString(),
+    });
+  }
+
+  if (masteryDeltas.length === 0) return null;
+
+  // 5. Load remaining (untouched) persisted learner state for decision context
+  //    (weak concepts are visible across topics for review scheduling).
+  const { data: allStates } = await scopedClient
+    .from('learner_concept_state')
+    .select('mastery, attempts, correct, incorrect, hints_used, avg_response_time_sec, concepts(slug)')
+    .eq('user_id', userId);
+
+  const persistedView: Record<string, { conceptSlug: string; mastery: number; attempts: number; correct: number; incorrect: number; hintsUsed: number; avgResponseTimeSec: number }> = {};
+  for (const s of allStates || []) {
+    const slug = (s.concepts as any)?.slug;
+    if (!slug || updates.some((u) => u.slug === slug)) continue;
+    persistedView[slug] = {
+      conceptSlug: slug,
+      mastery: Number(s.mastery ?? 0.5),
+      attempts: Number(s.attempts ?? 0),
+      correct: Number(s.correct ?? 0),
+      incorrect: Number(s.incorrect ?? 0),
+      hintsUsed: Number(s.hints_used ?? 0),
+      avgResponseTimeSec: Number(s.avg_response_time_sec ?? 0),
+    };
+  }
+
+  // Touched concepts take the authoritative updateMastery output — the same
+  // values that were just persisted (running averages included).
+  const learner = mergeLearnerStates(persistedView, updates);
+
+  // 6. Diagnose + decide (evidence reused, not recomputed).
+  const assessed = buildAssessedInputs(masteryDeltas, learner, evidenceBySlug);
+
+  const focusSlug = assessed[0]?.slug;
+  let diagnosis: PrerequisiteDiagnosis | undefined;
+  if (focusSlug) {
+    diagnosis = diagnosePrerequisite(focusSlug, conceptGraph, learner);
+  }
+
+  const decision = chooseNextAction({
+    assessed,
+    graph: conceptGraph,
+    learner,
+    currentDifficulty: quizDifficulty,
+  });
+
+  const trace = buildAgentTrace(
+    [{ correctCount: telemetry.filter((t) => t.is_correct).length, total: telemetry.length }],
+    decision,
+    diagnosis
+  );
+
+  return { decision, masteryDeltas, trace, currentDifficulty: quizDifficulty };
+}

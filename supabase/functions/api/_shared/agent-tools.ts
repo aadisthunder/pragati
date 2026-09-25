@@ -22,9 +22,11 @@ const generateQuizParameters = {
     },
     num_questions: {
       type: 'number',
-      minimum: 1,
-      maximum: 10,
-      description: 'Number of questions to generate (1-10)',
+      // NOTE: intentionally no minimum/maximum here. Groq validates tool-call
+      // arguments against this schema BEFORE our code runs, so any hard bound
+      // becomes a hard API error (tool_use_failed) when the model overshoots.
+      // Clamping happens in sanitizeToolArgs instead.
+      description: 'Number of questions to generate (the app will normalize the value)',
     },
   },
   required: ['topic'],
@@ -33,7 +35,8 @@ const generateQuizParameters = {
 const limitParameters = (def: number, description: string) => ({
   type: 'object',
   properties: {
-    limit: { type: 'number', minimum: 1, maximum: 20, description },
+    // No minimum/maximum: same Groq schema-validation constraint as above.
+    limit: { type: 'number', description },
   },
 } as const);
 
@@ -186,10 +189,12 @@ export function sanitizeToolArgs(toolName: string, rawArgs: any = {}, userMessag
     if (typeof args.limit !== 'number' || !Number.isFinite(args.limit)) {
       args.limit = 5;
     }
+    args.limit = Math.min(20, Math.max(1, Math.round(args.limit)));
   } else if (toolName === 'get_questions_to_review') {
     if (typeof args.limit !== 'number' || !Number.isFinite(args.limit)) {
       args.limit = 10;
     }
+    args.limit = Math.min(20, Math.max(1, Math.round(args.limit)));
   }
 
   return args;
@@ -274,6 +279,101 @@ export function stripAnswerKeyForClient(quiz: any): any {
 }
 
 // ---------------------------------------------------------------------------
+// Concept tagging (adaptive learner model)
+// ---------------------------------------------------------------------------
+
+/**
+ * A small seed taxonomy the quiz generator recognizes by keyword. Prerequisite
+ * links must reference known slugs — the prerequisite-diagnosis engine walks
+ * exactly these edges. Seeded judge demos map onto the same slugs.
+ */
+export const KNOWN_CONCEPTS: Array<{
+  name: string;
+  slug: string;
+  topic: string;
+  prerequisites: string[];
+  keywords: string[];
+}> = [
+  { name: 'Functions', slug: 'functions', topic: 'Calculus', prerequisites: [], keywords: ['function', 'domain', 'range'] },
+  { name: 'Limits', slug: 'limits', topic: 'Calculus', prerequisites: ['functions'], keywords: ['limit', 'continuity', 'approaches'] },
+  { name: 'Power Rule', slug: 'power_rule', topic: 'Calculus', prerequisites: ['functions'], keywords: ['power rule', 'exponent'] },
+  { name: 'Chain Rule', slug: 'chain_rule', topic: 'Calculus', prerequisites: ['power_rule'], keywords: ['chain rule', 'composite'] },
+  { name: 'Derivative Application', slug: 'derivative_application', topic: 'Calculus', prerequisites: ['power_rule', 'limits'], keywords: ['derivative', 'slope', 'tangent', 'rate of change'] },
+];
+
+/** Converts a concept name to the canonical slug form used across the schema. */
+export function slugifyConceptName(name: string): string {
+  return (
+    String(name)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 60) || 'concept'
+  );
+}
+
+export interface ConceptTag {
+  name: string;
+  slug: string;
+  prerequisites: string[];
+}
+
+/**
+ * Keyword-matches question text against the seed taxonomy. Falls back to the
+ * quiz topic as a single concept so mastery updates always have a target.
+ */
+export function matchConceptsForQuestion(text: string, fallbackTopic: string): ConceptTag[] {
+  const lower = String(text).toLowerCase();
+  const matched = KNOWN_CONCEPTS.filter((c) => c.keywords.some((k) => lower.includes(k)));
+  if (matched.length > 0) {
+    return matched.map((c) => ({ name: c.name, slug: c.slug, prerequisites: [...c.prerequisites] }));
+  }
+  const safeTopic = String(fallbackTopic || 'General').trim().slice(0, 60) || 'General';
+  return [{ name: safeTopic, slug: slugifyConceptName(safeTopic), prerequisites: [] }];
+}
+
+/**
+ * Normalizes LLM-provided concept tags on generated questions and backfills
+ * missing ones via keyword matching. Never throws: a question without usable
+ * tags falls back to the quiz topic as a single concept, so quiz generation
+ * can never fail because of concept tags.
+ */
+export function normalizeConceptTags(parsed: any, fallbackTopic: string): any {
+  if (!parsed || !Array.isArray(parsed.questions)) return parsed;
+
+  parsed.questions = parsed.questions.map((q: any) => {
+    if (!q || typeof q !== 'object') return q;
+
+    const rawTags: any[] = Array.isArray(q.concepts) ? q.concepts : [];
+    const cleaned: ConceptTag[] = [];
+    for (const t of rawTags) {
+      const obj = typeof t === 'string' ? { name: t } : t;
+      if (!obj || typeof obj !== 'object') continue;
+      const name = typeof obj.name === 'string' && obj.name.trim() ? obj.name.trim() : '';
+      const slugSource = typeof obj.slug === 'string' && obj.slug.trim() ? obj.slug : name;
+      if (!name && !slugSource) continue;
+      cleaned.push({
+        name: name || slugifyConceptName(slugSource),
+        slug: slugifyConceptName(slugSource),
+        prerequisites: Array.isArray(obj.prerequisites)
+          ? obj.prerequisites.filter((p: any) => typeof p === 'string' && p.trim()).map(slugifyConceptName)
+          : [],
+      });
+    }
+
+    if (cleaned.length === 0) {
+      const searchText = `${q.prompt || ''} ${q.hint || ''} ${q.explanation || ''}`;
+      q.concepts = matchConceptsForQuestion(searchText, fallbackTopic);
+    } else {
+      q.concepts = cleaned;
+    }
+    return q;
+  });
+
+  return parsed;
+}
+
+// ---------------------------------------------------------------------------
 // Quiz generation prompt
 // ---------------------------------------------------------------------------
 
@@ -301,10 +401,14 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
       ],
       "correct_answer": "A",
       "hint": "Targeted conceptual hint",
-      "explanation": "Clear step-by-step rationale for why A is correct"
+      "explanation": "Clear step-by-step rationale for why A is correct",
+      "concepts": [
+        {"name": "Power Rule", "prerequisites": ["Functions"]}
+      ]
     }
   ]
-}`;
+}
+For each question, "concepts" must list the 1-2 specific sub-concepts that question tests, each with its prerequisite concept names. Use precise sub-concept names (e.g. "Power Rule", "Chain Rule", "Limits"), never the broad topic itself.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -330,4 +434,41 @@ export function containsQuizSpoilers(text: string): boolean {
  */
 export function buildQuizReadyFallback(topic: string): string {
   return `I have generated your practice quiz on **${topic}**. You can start taking it using the interactive card below!`;
+}
+
+// ---------------------------------------------------------------------------
+// Emoji hygiene
+// ---------------------------------------------------------------------------
+
+/**
+ * Matches emoji plus related symbol code blocks:
+ * - 1F300–1FAFF: pictographs, transport, flags base, supplementals
+ * - 2600–27BF  : misc symbols, dingbats
+ * - FE0F/200D  : variation selector + ZWJ (multi-codepoint sequences)
+ * - 1F1E6–1F1FF: regional indicators (flags)
+ * - 1F3FB–1F3FF: skin-tone modifiers
+ */
+const EMOJI_PATTERN = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}]/gu;
+
+/**
+ * Strips emojis from model output (design system rule: zero emojis, only
+ * clean text in UI). Collapses the whitespace the removal leaves behind.
+ * Non-string input passes through unchanged.
+ */
+export function stripEmojis(text: string): string {
+  if (typeof text !== 'string') return text;
+  return text
+    .replace(EMOJI_PATTERN, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/ +([,.!?;:])/g, '$1')
+    .trim();
+}
+
+/**
+ * Converts a raw Groq error body into a short, user-friendly sentence.
+ * Never echoes model internals (arguments, schema details, error codes).
+ */
+export function extractGroqErrorMessage(rawErrorText: string): string {
+  void rawErrorText;
+  return "I couldn't complete that request just now. Please try rephrasing your question.";
 }

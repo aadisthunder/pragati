@@ -22,6 +22,9 @@ import {
   Trash2,
   AlertTriangle,
   Send,
+  Brain,
+  TrendingUp,
+  Activity,
 } from 'lucide-react';
 import {
   getSubmitModalAnsweredCardClass,
@@ -45,6 +48,59 @@ export function formatMathForMarkdown(text: string): string {
 export function sanitizePromptText(text: string): string {
   if (!text) return '';
   return normalizeLatexDelimiters(text.trim());
+}
+
+/** Maps a trace event symbol to its badge color classes. */
+export function traceSymbolClass(symbol: string): string {
+  if (symbol === 'ok') return 'bg-emerald-100 text-emerald-700';
+  if (symbol === 'warn') return 'bg-amber-100 text-amber-700';
+  if (symbol === 'action') return 'bg-indigo-100 text-indigo-700';
+  return 'bg-slate-100 text-slate-500';
+}
+
+/** Maps a trace event symbol to its glyph. Text symbols only — no emojis. */
+export function traceSymbolGlyph(symbol: string): string {
+  if (symbol === 'ok') return '✓';
+  if (symbol === 'warn') return '!';
+  if (symbol === 'action') return '→';
+  return '·';
+}
+
+/** Maps a quiz difficulty label to the 1-5 display scale. */
+export function difficultyToLevel(label: string | undefined): number {
+  if (label === 'beginner') return 1;
+  if (label === 'advanced') return 5;
+  return 3;
+}
+
+/**
+ * Renders the difficulty display (plan P0.4): "Level 2 → 3" on a transition,
+ * "Level N" when steady.
+ */
+export function formatDifficultyDisplay(from: string | undefined, to: string | undefined): string {
+  const fromLevel = difficultyToLevel(from);
+  const toLevel = difficultyToLevel(to);
+  return fromLevel === toLevel ? `Level ${toLevel}` : `Level ${fromLevel} → ${toLevel}`;
+}
+
+/**
+ * Builds the instructor-chat prompt that carries out the adaptive engine's
+ * decision — the "Next Best Action" card drives the agent, not just labels it.
+ */
+export function buildNextActionPrompt(nextStep: any, fallbackTopic: string): string {
+  if (!nextStep) return '';
+  const concept = nextStep.conceptName || fallbackTopic || 'the topic';
+  const level = nextStep.difficultyLabel || 'intermediate';
+  const prompts: Record<string, string> = {
+    PREREQUISITE_REPAIR: `I just struggled with ${concept}. Pragati identified a weak prerequisite behind it. Please run a short diagnostic on that prerequisite, then repair it with a focused micro-lesson before we retest ${concept}.`,
+    RETEACH: `I keep missing questions on ${concept}. Please re-teach it with a focused micro-lesson and check my understanding afterward.`,
+    MICRO_QUIZ: `Please generate a short micro-quiz on ${concept} at ${level} difficulty to confirm my mastery.`,
+    CHALLENGE: `I have mastered ${concept}. Please give me harder ${level}-level problems on it to stretch my understanding.`,
+    SPACED_REVIEW: `Please run a quick spaced-review recall check on ${concept} — ask me a few rapid questions to verify my retention.`,
+    TEACH_NEW: `I have demonstrated mastery of ${concept}. Please teach me the next concept that builds on it.`,
+    SOCRATIC: `Let's continue exploring ${concept} Socratically.`,
+  };
+  return prompts[nextStep.action] || `Continue teaching me ${concept}.`;
 }
 
 interface QuestionOption {
@@ -361,6 +417,9 @@ export const QuizArenaPage: React.FC = () => {
   // --- POST-TEST RESULTS SCREEN ---
   if (isSubmitted && attemptResult) {
     const { summary, results } = attemptResult;
+    const nextStep = attemptResult.nextStep || null;
+    const masteryDeltas = attemptResult.masteryDeltas || [];
+    const trace = attemptResult.trace || [];
     return (
       <div className="h-full overflow-y-auto subtle-scroll">
         <div className="max-w-4xl mx-auto w-full p-4 md:p-8 space-y-6 font-sans">
@@ -415,6 +474,109 @@ export const QuizArenaPage: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {/* Adaptive Agent: mastery deltas + next best action + trace */}
+          {nextStep && (
+            <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 space-y-6 shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
+                  <Brain className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-display font-bold text-slate-900">Adaptive Learning Engine</h3>
+                  <p className="text-xs text-slate-500">What the agent learned from this attempt</p>
+                </div>
+              </div>
+
+              {/* Mastery before -> after */}
+              {masteryDeltas.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider font-display">Concept Mastery Updated</h4>
+                  {masteryDeltas.map((d: any) => {
+                    const beforePct = Math.round((d.before ?? 0) * 100);
+                    const afterPct = Math.round((d.after ?? 0) * 100);
+                    const improved = afterPct >= beforePct;
+                    return (
+                      <div key={d.conceptSlug} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className="text-sm font-bold text-slate-900 font-display">{d.conceptName}</span>
+                          <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded-full border ${improved ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                            {beforePct}% → {afterPct}%
+                          </span>
+                        </div>
+                        <div className="relative h-2.5 rounded-full bg-slate-200 overflow-hidden">
+                          <div
+                            className={`absolute inset-y-0 left-0 rounded-full ${improved ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                            style={{ width: `${afterPct}%` }}
+                          />
+                          <div
+                            className="absolute inset-y-0 left-0 rounded-full bg-slate-400/60"
+                            style={{ width: `${beforePct}%` }}
+                          />
+                        </div>
+                        {d.nextReviewAt && (
+                          <p className="text-[11px] text-slate-500 mt-2 font-mono">
+                            Scheduled for review: {new Date(d.nextReviewAt).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Agent trace timeline */}
+              {trace.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider font-display flex items-center gap-1.5">
+                    <Activity className="w-3.5 h-3.5" />
+                    <span>Agent Trace</span>
+                  </h4>
+                  <div className="space-y-1.5">
+                    {trace.map((t: any, idx: number) => (
+                      <div key={idx} className="flex items-center gap-2.5 text-xs">
+                        <span className={`w-5 h-5 shrink-0 rounded-md flex items-center justify-center font-mono font-bold text-[11px] ${traceSymbolClass(t.symbol)}`}>
+                          {traceSymbolGlyph(t.symbol)}
+                        </span>
+                        <span className="text-slate-700 font-medium">{t.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Next best action card */}
+              <div className="p-5 bg-indigo-50/60 border border-indigo-200 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-indigo-600" />
+                    <span className="text-xs font-bold text-indigo-900 uppercase tracking-wider font-display">Next Best Action</span>
+                  </div>
+                  <span className="text-[11px] font-mono font-bold text-indigo-800 bg-white/80 border border-indigo-200 px-2.5 py-1 rounded-lg">
+                    Adaptive difficulty: {formatDifficultyDisplay(attemptResult.currentDifficulty, nextStep.difficultyLabel)}
+                  </span>
+                </div>
+                <p className="text-lg font-display font-extrabold text-slate-900">
+                  {String(nextStep.action).replace(/_/g, ' ')}
+                  {nextStep.conceptName ? <span className="text-indigo-700"> — {nextStep.conceptName}</span> : null}
+                </p>
+                <div className="p-3 bg-white/80 border border-indigo-100 rounded-xl">
+                  <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider block mb-0.5">Why this next?</span>
+                  <p className="text-xs text-slate-700 leading-relaxed">{nextStep.rationale}</p>
+                </div>
+                {nextStep.expectedOutcome && (
+                  <p className="text-xs text-indigo-800/80 font-medium">{nextStep.expectedOutcome}</p>
+                )}
+                <button
+                  onClick={() => navigate(`/instructor?prompt=${encodeURIComponent(buildNextActionPrompt(nextStep, quiz?.topic || ''))}`)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors shadow-xs font-display cursor-pointer"
+                >
+                  <span>Do it now with AI</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
 
         {/* Detailed Question Review */}
         <div className="space-y-4">
@@ -699,7 +861,7 @@ export const QuizArenaPage: React.FC = () => {
         </div>
 
         {/* Question Palette: Horizontal bar on mobile, right-hand vertical column on desktop */}
-        <aside className="w-full md:w-14 h-auto md:h-fit self-center shrink-0 bg-white border border-slate-200 rounded-2xl p-1.5 shadow-xs flex flex-row md:flex-col items-center justify-start md:justify-center gap-2 overflow-x-auto md:overflow-y-auto subtle-scroll order-first md:order-last max-h-none md:max-h-[calc(100vh-140px)]">
+        <aside className="w-full md:w-14 h-auto md:h-fit self-center shrink-0 bg-white border border-slate-200 rounded-2xl p-1.5 shadow-xs flex flex-row md:flex-col items-center justify-start md:justify-center gap-2 overflow-x-auto md:overflow-y-auto no-scrollbar md-subtle-scroll order-first md:order-last max-h-none md:max-h-[calc(100vh-140px)]">
           {questions.map((q, idx) => {
             const isActive = idx === currentIndex;
             const status = getQuestionSquareStatus(q.id, answers, visitedQuestionIds);

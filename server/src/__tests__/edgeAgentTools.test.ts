@@ -38,11 +38,15 @@ describe('AGENT_TOOL_SPECS', () => {
     }
   });
 
-  it('constrains generate_quiz difficulty and question count', () => {
+  it('constrains generate_quiz difficulty but leaves numeric bounds to sanitizeToolArgs', () => {
     const spec = AGENT_TOOL_SPECS.find((t: any) => t.function.name === 'generate_quiz');
     expect(spec.function.parameters.properties.difficulty.enum).toEqual(['beginner', 'intermediate', 'advanced']);
-    expect(spec.function.parameters.properties.num_questions.minimum).toBe(1);
-    expect(spec.function.parameters.properties.num_questions.maximum).toBe(10);
+    // Groq validates tool arguments against this schema BEFORE our code runs, so
+    // any hard numeric bound becomes a hard API error (tool_use_failed) when the
+    // model overshoots. Bounds must live ONLY in sanitizeToolArgs (see
+    // emojiAndSchema.test.ts and the comment in agent-tools.ts).
+    expect(spec.function.parameters.properties.num_questions.minimum).toBeUndefined();
+    expect(spec.function.parameters.properties.num_questions.maximum).toBeUndefined();
   });
 });
 

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { AppShell } from './components/layout/AppShell';
+
 // Lazy loaded route components for optimal bundle splitting & background prefetching
 const LoginPage = React.lazy(() =>
   import('./pages/LoginPage').then((m) => ({ default: m.LoginPage }))

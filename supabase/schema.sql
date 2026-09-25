@@ -139,6 +139,70 @@ create table if not exists public.chat_messages (
   created_at timestamptz not null default now()
 );
 
+-- ---------------------------------------------------------------------------
+-- Adaptive learner model (concepts, prerequisites, per-learner mastery)
+-- ---------------------------------------------------------------------------
+-- The adaptive agent's data layer: every question maps to one or more concepts,
+-- concepts carry prerequisite edges, and each learner accumulates per-concept
+-- mastery from quiz telemetry. learning_events records every mastery transition
+-- so interventions can be evaluated (before/after evidence).
+
+create table if not exists public.concepts (
+  id uuid primary key default gen_random_uuid(),
+  topic text not null,
+  name text not null,
+  slug text not null,
+  description text not null default '',
+  created_at timestamptz not null default now(),
+  unique (topic, slug)
+);
+
+create table if not exists public.concept_prerequisites (
+  concept_id uuid not null references public.concepts (id) on delete cascade,
+  prerequisite_id uuid not null references public.concepts (id) on delete cascade,
+  primary key (concept_id, prerequisite_id)
+);
+
+create table if not exists public.question_concepts (
+  question_id uuid not null references public.questions (id) on delete cascade,
+  concept_id uuid not null references public.concepts (id) on delete cascade,
+  weight numeric(3, 2) not null default 1.0 check (weight > 0),
+  primary key (question_id, concept_id)
+);
+
+create table if not exists public.learner_concept_state (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  concept_id uuid not null references public.concepts (id) on delete cascade,
+  mastery numeric(4, 3) not null default 0.5 check (mastery >= 0 and mastery <= 1),
+  confidence numeric(4, 3) not null default 0.5 check (confidence >= 0 and confidence <= 1),
+  attempts integer not null default 0,
+  correct integer not null default 0,
+  incorrect integer not null default 0,
+  avg_response_time_sec numeric(7, 1) not null default 0,
+  hints_used integer not null default 0,
+  misconception text,
+  last_seen_at timestamptz,
+  next_review_at timestamptz,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, concept_id)
+);
+
+create table if not exists public.learning_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  concept_id uuid references public.concepts (id) on delete set null,
+  event_type text not null,
+  before_mastery numeric(4, 3),
+  after_mastery numeric(4, 3),
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+-- Indexes for the agent's hot read paths (learner state fetch, due reviews).
+create index if not exists idx_learner_concept_state_user on public.learner_concept_state (user_id);
+create index if not exists idx_learner_concept_state_review on public.learner_concept_state (user_id, next_review_at);
+create index if not exists idx_learning_events_user on public.learning_events (user_id, created_at);
+
 -- ============================================================================
 -- Row-Level Security
 -- ============================================================================
@@ -148,14 +212,19 @@ alter table public.quizzes            enable row level security;
 alter table public.questions          enable row level security;
 alter table public.quiz_attempts      enable row level security;
 alter table public.question_telemetry enable row level security;
-alter table public.chat_sessions      enable row level security;
-alter table public.chat_messages      enable row level security;
+alter table public.chat_sessions      enable row level security;alter table public.chat_messages        enable row level security;
+alter table public.concepts                  enable row level security;
+alter table public.concept_prerequisites     enable row level security;
+alter table public.question_concepts         enable row level security;
+alter table public.learner_concept_state     enable row level security;
+alter table public.learning_events           enable row level security;
 
 -- SECURITY NOTE
 -- --------------
 -- GET /api/instructor/sessions/:id/messages and the explain_missed_question tool filter
 -- rows in application code only partially (by session_id / question id). They are safe
 -- ONLY because these RLS policies scope every read to auth.uid(). Do not loosen them.
+-- learner_concept_state / learning_events follow the same owner-only model.
 
 -- Owner-only access to everything
 create policy "profiles_select_own"    on public.user_profiles      for select using (auth.uid() = id);
@@ -197,6 +266,24 @@ create policy "chat_delete_own"        on public.chat_sessions      for delete u
 create policy "chat_msg_select_own"    on public.chat_messages      for select using (auth.uid() = user_id);
 create policy "chat_msg_insert_own"    on public.chat_messages      for insert with check (auth.uid() = user_id);
 create policy "chat_msg_delete_own"    on public.chat_messages      for delete using (auth.uid() = user_id);
+
+-- Adaptive learner model: concepts and the graph are shared read-only reference
+-- data (seeded); only the server writes them via the service client.
+create policy "concepts_select_all" on public.concepts for select using (true);
+create policy "concept_prereqs_select_all" on public.concept_prerequisites for select using (true);
+create policy "question_concepts_select_own" on public.question_concepts for select using (
+  exists (
+    select 1 from public.quizzes q
+    join public.questions qs on qs.quiz_id = q.id
+    where qs.id = question_concepts.question_id
+      and q.created_by = auth.uid()
+  )
+);
+create policy "learner_state_select_own"  on public.learner_concept_state for select using (auth.uid() = user_id);
+create policy "learner_state_insert_own"  on public.learner_concept_state for insert with check (auth.uid() = user_id);
+create policy "learner_state_update_own"  on public.learner_concept_state for update using (auth.uid() = user_id);
+create policy "learning_events_select_own" on public.learning_events for select using (auth.uid() = user_id);
+create policy "learning_events_insert_own" on public.learning_events for insert with check (auth.uid() = user_id);
 
 -- ============================================================================
 -- Demo ("Instant Judge Login") account hardening

@@ -97,6 +97,25 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* Desktop-only subtle scrollbar (pairs with .no-scrollbar for mobile-hidden) */
+  @media (min-width: 768px) {
+    .md-subtle-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .md-subtle-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .md-subtle-scroll::-webkit-scrollbar-thumb {
+      background: rgba(203, 213, 225, 0.8);
+      border-radius: 9999px;
+    }
+    .md-subtle-scroll {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(203, 213, 225, 0.8) transparent;
+    }
+  }
 }
 
 /* Touch & Mobile Hover Suppression: eliminate swipe jitter and sticky hover states */
