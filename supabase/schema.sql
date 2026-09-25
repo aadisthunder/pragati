@@ -198,10 +198,51 @@ create table if not exists public.learning_events (
   created_at timestamptz not null default now()
 );
 
+-- ---------------------------------------------------------------------------
+-- Learning goals (persistent AI memory: what the user wants to master)
+-- ---------------------------------------------------------------------------
+-- The onboarding popup and the Topics page both write here. Mastery itself is
+-- NEVER stored on goals: it is derived live from learner_concept_state by
+-- matching goal_subtopics to concepts (slug/name), so quiz evidence flows
+-- straight into goal progress without a sync job.
+
+create table if not exists public.learning_goals (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  title text not null check (char_length(btrim(title)) between 1 and 80),
+  slug text not null,
+  source text not null default 'manual' check (source in ('onboarding', 'manual')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, slug)
+);
+
+create table if not exists public.goal_subtopics (
+  id uuid primary key default gen_random_uuid(),
+  goal_id uuid not null references public.learning_goals (id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  name text not null check (char_length(btrim(name)) between 1 and 60),
+  slug text not null,
+  order_index integer not null default 0,
+  created_at timestamptz not null default now(),
+  unique (goal_id, slug)
+);
+
+create index if not exists idx_learning_goals_user on public.learning_goals (user_id);
+create index if not exists idx_goal_subtopics_goal on public.goal_subtopics (goal_id);
+create index if not exists idx_goal_subtopics_user on public.goal_subtopics (user_id);
+
 -- Indexes for the agent's hot read paths (learner state fetch, due reviews).
 create index if not exists idx_learner_concept_state_user on public.learner_concept_state (user_id);
 create index if not exists idx_learner_concept_state_review on public.learner_concept_state (user_id, next_review_at);
 create index if not exists idx_learning_events_user on public.learning_events (user_id, created_at);
+
+-- Onboarding flag for the first-login "what do you want to master?" popup.
+-- Null = not completed. The read-only demo account can never persist this (its
+-- update policy is blocked below), so the popup appears on every fresh load
+-- for that account — intentional, and requires zero special-case code.
+alter table public.user_profiles
+  add column if not exists onboarding_completed_at timestamptz;
 
 -- ============================================================================
 -- Row-Level Security
@@ -285,6 +326,16 @@ create policy "learner_state_update_own"  on public.learner_concept_state for up
 create policy "learning_events_select_own" on public.learning_events for select using (auth.uid() = user_id);
 create policy "learning_events_insert_own" on public.learning_events for insert with check (auth.uid() = user_id);
 
+-- Learning goals: strictly owner-only, like every learner-owned table.
+create policy "goals_select_own"  on public.learning_goals for select using (auth.uid() = user_id);
+create policy "goals_insert_own"  on public.learning_goals for insert with check (auth.uid() = user_id);
+create policy "goals_update_own"  on public.learning_goals for update using (auth.uid() = user_id);
+create policy "goals_delete_own"  on public.learning_goals for delete using (auth.uid() = user_id);
+create policy "goal_subtopics_select_own"  on public.goal_subtopics for select using (auth.uid() = user_id);
+create policy "goal_subtopics_insert_own"  on public.goal_subtopics for insert with check (auth.uid() = user_id);
+create policy "goal_subtopics_update_own"  on public.goal_subtopics for update using (auth.uid() = user_id);
+create policy "goal_subtopics_delete_own"  on public.goal_subtopics for delete using (auth.uid() = user_id);
+
 -- ============================================================================
 -- Demo ("Instant Judge Login") account hardening
 -- ============================================================================
@@ -322,6 +373,10 @@ create policy "demo_readonly_quizzes_insert"   on public.quizzes            for 
 create policy "demo_readonly_chat_msg_delete"  on public.chat_messages      for delete using (not public.is_demo_account());
 create policy "demo_readonly_chat_delete"      on public.chat_sessions      for delete using (not public.is_demo_account());
 create policy "demo_readonly_telemetry_delete" on public.question_telemetry for delete using (not public.is_demo_account());
+-- Block profile updates (skill rating, streak, onboarding flag) for the demo
+-- account: its onboarding flag can never persist, so the first-login popup
+-- reappears on every fresh load — intentional for the judge experience.
+create policy "demo_readonly_profile_update"   on public.user_profiles      for update using (not public.is_demo_account());
 
 -- NOTE: for a fully locked-down demo you may also want a database trigger that
 -- downgrades writes, or a dedicated read-only Postgres role. Policies above are

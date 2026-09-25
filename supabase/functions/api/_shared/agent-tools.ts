@@ -103,6 +103,20 @@ export const AGENT_TOOL_SPECS: any[] = [
       parameters: limitParameters(10, 'How many missed questions to fetch (default 10)'),
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'get_learning_goals',
+      description:
+        "Fetches the student's current learning goals with live mastery percentages per subtopic, so you can reference their progress and offer targeted tests. Takes no arguments.",
+      parameters: {
+        type: 'object',
+        properties: {},
+        // No required list: the tool is intentionally parameterless (and has
+        // no min/max bounds for Groq to reject).
+      },
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
