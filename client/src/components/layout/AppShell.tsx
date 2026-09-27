@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { NavLink, Outlet, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { LogOut, Plus, MessageSquare, Trash2, Menu, X, SquarePen } from 'lucide-react';
@@ -9,10 +8,16 @@ import {
   getMobileBackdropClass,
   getFloatingMenuButtonClass,
   getFloatingNewChatButtonClass,
-  handleModalBackdropClick,
 } from '../../utils/theme';
 import { apiRequest, apiRequestCached, invalidateCache, getFromCache } from '../../api/client';
 import { OnboardingGoalModal } from '../onboarding/OnboardingGoalModal';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import {
+  requestConfirmation,
+  dismissConfirmation,
+  beginConfirmation,
+  type PendingConfirmation,
+} from '../../utils/confirmAction';
 import { buildSidebarNavItems, filterVisibleChatSessions, HELP_TOUR_PATH } from './sidebarNav';
 import { FeatureTourModal } from '../tour/FeatureTourModal';
 import { nextPopupAfterTour, POPUP_GOAL_MODAL } from '../tour/onboardingFlow';
@@ -29,8 +34,8 @@ export const AppShell: React.FC = () => {
   const currentSessionId = searchParams.get('session');
 
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
-  const [sessionToDelete, setSessionToDelete] = useState<{ id: string; title: string } | null>(null);
-  const [deletingSession, setDeletingSession] = useState(false);
+  const [sessionToDelete, setSessionToDelete] = useState<PendingConfirmation | null>(null);
+  const [sessionTitles, setSessionTitles] = useState<Record<string, string>>({});
 
   // Learning goals for the read-only demo's chat goal-memory + onboarding popups
   const [showTour, setShowTour] = useState(false);
@@ -134,21 +139,17 @@ export const AppShell: React.FC = () => {
     };
   }, []);
 
-  // Close Delete Chat modal or mobile drawer on Escape key press
+  // Close the mobile drawer on Escape; the Delete Chat modal handles its own Escape.
   useEffect(() => {
-    if (!sessionToDelete && !isMobileDrawerOpen) return;
+    if (!isMobileDrawerOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (sessionToDelete && !deletingSession) {
-          setSessionToDelete(null);
-        } else if (isMobileDrawerOpen) {
-          setIsMobileDrawerOpen(false);
-        }
+        setIsMobileDrawerOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [sessionToDelete, deletingSession, isMobileDrawerOpen]);
+  }, [isMobileDrawerOpen]);
 
   const handleStartNewChat = () => {
     navigate('/instructor?session=new');
@@ -156,13 +157,17 @@ export const AppShell: React.FC = () => {
 
   const handleRequestDeleteSession = (e: React.MouseEvent, sess: { id: string; title: string }) => {
     e.stopPropagation();
-    setSessionToDelete(sess);
+    // Reuse the shared ConfirmDialog: it owns busy/Escape/backdrop guards.
+    setSessionTitles((prev) => ({ ...prev, [sess.id]: sess.title }));
+    setSessionToDelete((cur) => requestConfirmation(cur, sess.id));
   };
 
   const handleConfirmDeleteSession = async () => {
-    if (!sessionToDelete || deletingSession) return;
-    const targetSessionId = sessionToDelete.id;
-    setDeletingSession(true);
+    const pending = sessionToDelete;
+    const armed = beginConfirmation(pending);
+    if (!pending || !armed) return;
+    setSessionToDelete(armed);
+    const targetSessionId = pending.id;
 
     try {
       await apiRequest(`/api/instructor/sessions/${targetSessionId}`, {
@@ -179,8 +184,7 @@ export const AppShell: React.FC = () => {
     } catch (err: any) {
       console.error('Failed to delete session:', err);
       alert(`Failed to delete chat: ${err.message}`);
-    } finally {
-      setDeletingSession(false);
+      setSessionToDelete(dismissConfirmation(armed));
     }
   };
 
@@ -397,54 +401,26 @@ export const AppShell: React.FC = () => {
         </div>
       </main>
 
-      {/* Delete Chat Confirmation Modal via Portal */}
-      {sessionToDelete &&
-        typeof document !== 'undefined' &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in cursor-pointer"
-            onClick={(e) => handleModalBackdropClick(e, () => setSessionToDelete(null), deletingSession)}
-          >
-            <div
-              className="bg-white rounded-3xl border border-slate-200 shadow-xl max-w-md w-full p-6 space-y-4 animate-in zoom-in-95 cursor-default"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-200 shrink-0">
-                  <Trash2 className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold font-display text-slate-900">Delete Chat?</h3>
-                  <p className="text-xs text-slate-500">This conversation will be permanently removed.</p>
-                </div>
-              </div>
-
-              <p className="text-sm text-slate-600 leading-relaxed">
-                Are you sure you want to delete <strong className="text-slate-900 font-semibold">&ldquo;{sessionToDelete.title || 'Untitled Chat'}&rdquo;</strong>? All messages and study history in this session will be removed.
-              </p>
-
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setSessionToDelete(null)}
-                  disabled={deletingSession}
-                  className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmDeleteSession}
-                  disabled={deletingSession}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-colors shadow-xs cursor-pointer disabled:opacity-50"
-                >
-                  {deletingSession ? 'Deleting...' : 'Delete Chat'}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
+      {/* Delete Chat confirmation — shared ConfirmDialog (same modal as topic delete) */}
+      <ConfirmDialog
+        open={sessionToDelete !== null}
+        title="Delete Chat?"
+        subtitle="This conversation will be permanently removed."
+        message={
+          <>
+            Are you sure you want to delete{' '}
+            <strong className="text-slate-900 font-semibold">
+              &ldquo;{(sessionToDelete && sessionTitles[sessionToDelete.id]) || 'Untitled Chat'}&rdquo;
+            </strong>
+            ? All messages and study history in this session will be removed.
+          </>
+        }
+        confirmLabel="Delete Chat"
+        confirmingLabel="Deleting..."
+        busy={sessionToDelete?.busy ?? false}
+        onConfirm={handleConfirmDeleteSession}
+        onCancel={() => setSessionToDelete((cur) => dismissConfirmation(cur))}
+      />
     </div>
   );
 };

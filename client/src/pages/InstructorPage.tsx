@@ -20,6 +20,7 @@ import {
 } from '../utils/theme';
 import { compressImageFile } from '../utils/imageCompressor';
 import { normalizeLatexDelimiters } from '../utils/latex';
+import { getChatFeedPaddingClass, getChatBottomSpacerClass } from '../utils/chatLayoutSpacing';
 import { useTypewriterPlaceholder } from '../hooks/useTypewriterPlaceholder';
 import { getDemoGoalsSession } from '../api/goals';
 import { useAuth } from '../context/AuthContext';
@@ -474,8 +475,9 @@ export const InstructorPage: React.FC = () => {
       ) : (
         /* Case 2: Conversation Message Feed & Floating Bottom Dock */
         <>
-          {/* Scrollable Message Feed - pb-48 sm:pb-52 allows messages to scroll behind floating dock, pt-14 provides mobile clearance below floating buttons */}
-          <div className="flex-1 overflow-y-auto subtle-scroll px-3 sm:px-4 md:px-6 pt-14 sm:pt-4 pb-48 sm:pb-52">
+          {/* Scrollable Message Feed - one clearance band for the floating dock (no double spacer), pt-14 provides mobile clearance below floating buttons */}
+          <div className={`flex-1 overflow-y-auto subtle-scroll px-3 sm:px-4 md:px-6 pt-14 sm:pt-4 ${getChatFeedPaddingClass('desktop')}`}>
+            {/* Dock budget lives in chatLayoutSpacing.ts (208px desktop / 224px mobile). */}
             <div className="w-full max-w-3xl mx-auto space-y-4 sm:space-y-6">
               {/* Chat Messages Feed */}
               {messages.map((msg, idx) => {
@@ -761,9 +763,9 @@ export const InstructorPage: React.FC = () => {
                   </div>
                 </div>
               )}
-              {/* Bottom spacing anchor to guarantee full clearance above the floating
-                  prompt dock (chips + input). Taller on mobile where chips wrap. */}
-              <div className="h-36 sm:h-28" />
+              {/* Zero-height scroll anchor: clearance lives ONLY in the feed's
+                  padding-bottom, so blank space after the last message stays minimal. */}
+              <div className={getChatBottomSpacerClass('desktop')} />
               <div ref={chatBottomRef} />
             </div>
           </div>

@@ -3,6 +3,7 @@ import { tool } from '@langchain/core/tools';
 import { ChatOpenAI } from '@langchain/openai';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { loadGoalMastery } from '../services/goalService.js';
+import { tagQuestionsWithConcepts, slugifyConceptName } from '../services/masteryCore.js';
 
 export const getLearningGoalsSchema = z.object({});
 
@@ -225,9 +226,90 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
           order_index: idx,
         }));
 
-        const { error: questionsError } = await supabaseClient
+        const { data: questionRows, error: questionsError } = await supabaseClient
           .from('questions')
-          .insert(questionsToInsert);
+          .insert(questionsToInsert)
+          .select('id, order_index');
+
+        // Persist question→concept mappings so the adaptive submit loop
+        // attributes evidence exactly instead of keyword-guessing (parity
+        // with the Edge Function's generate_quiz). Tagging is pure and
+        // non-fatal: quiz generation must succeed even if mapping fails.
+        if (!questionsError && questionRows && questionRows.length > 0) {
+          try {
+            const tagged = tagQuestionsWithConcepts(questionsList, parsed.topic || topic);
+            const orderToId = new Map<number, string>();
+            for (const r of questionRows) orderToId.set(r.order_index, r.id);
+
+            const tagSlugs = new Map<string, { name: string; slug: string }>();
+            for (const q of tagged) {
+              for (const tag of q.concepts || []) {
+                tagSlugs.set(tag.slug, { name: tag.name, slug: tag.slug });
+              }
+            }
+
+            // Ensure the tagged concepts exist (insert missing ones only).
+            const existingSlugs = new Set<string>();
+            if (tagSlugs.size > 0) {
+              const { data: conceptRows } = await supabaseClient
+                .from('concepts')
+                .select('id, slug')
+                .in('slug', Array.from(tagSlugs.keys()));
+              for (const c of conceptRows || []) existingSlugs.add(c.slug);
+
+              const missing = Array.from(tagSlugs.values()).filter((c) => !existingSlugs.has(c.slug));
+              if (missing.length > 0) {
+                const { data: created, error: conceptError } = await supabaseClient
+                  .from('concepts')
+                  .insert(
+                    missing.map((c) => ({
+                      topic: parsed.topic || topic || 'General',
+                      name: c.name,
+                      slug: c.slug,
+                      description: `Concept for ${parsed.topic || topic || 'General'}`,
+                    }))
+                  )
+                  .select('id, slug');
+                if (conceptError) {
+                  console.error('concept insert failed (non-fatal):', conceptError.message);
+                } else {
+                  for (const c of created || []) existingSlugs.add(c.slug);
+                }
+              }
+            }
+
+            const conceptIdsBySlug = new Map<string, string>();
+            if (existingSlugs.size > 0) {
+              const { data: allConceptRows } = await supabaseClient
+                .from('concepts')
+                .select('id, slug')
+                .in('slug', Array.from(existingSlugs));
+              for (const c of allConceptRows || []) conceptIdsBySlug.set(c.slug, c.id);
+            }
+
+            const mappingRows: any[] = [];
+            for (let i = 0; i < tagged.length; i++) {
+              const questionId = orderToId.get(i);
+              if (!questionId) continue;
+              for (const tag of tagged[i].concepts || []) {
+                const conceptId = conceptIdsBySlug.get(tag.slug);
+                if (conceptId) {
+                  mappingRows.push({ question_id: questionId, concept_id: conceptId, weight: 1.0 });
+                }
+              }
+            }
+            if (mappingRows.length > 0) {
+              const { error: mappingError } = await supabaseClient
+                .from('question_concepts')
+                .upsert(mappingRows, { onConflict: 'question_id,concept_id', ignoreDuplicates: true });
+              if (mappingError) {
+                console.error('question_concepts persist failed (non-fatal):', mappingError.message);
+              }
+            }
+          } catch (tagErr: any) {
+            console.error('Concept tagging failed (non-fatal):', tagErr?.message || tagErr);
+          }
+        }
 
         if (questionsError) {
           return JSON.stringify({

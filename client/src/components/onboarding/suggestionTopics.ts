@@ -16,3 +16,17 @@ export const SUGGESTION_TOPICS: string[] = [
   'Conversational Spanish',
   'Neural Networks',
 ];
+
+/**
+ * One-click chips rendered between the goal input and the "Create my learning
+ * plan" CTA. Tapping a chip fills the input verbatim so users (and judges) can
+ * start from a real example instead of a blank field.
+ */
+export const SUGGESTION_CHIPS: string[] = SUGGESTION_TOPICS;
+
+/** Chip styling: neutral pill when idle, dark filled when selected. */
+export function getGoalSuggestionChipClass(isActive: boolean): string {
+  return isActive
+    ? 'inline-flex items-center px-3 py-1.5 text-xs font-semibold rounded-full border border-slate-900 bg-slate-900 text-white shadow-xs transition-all cursor-pointer active:scale-[0.97] shrink-0'
+    : 'inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-full border border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-400 hover:bg-white hover:text-slate-900 shadow-xs transition-all cursor-pointer active:scale-[0.97] shrink-0';
+}

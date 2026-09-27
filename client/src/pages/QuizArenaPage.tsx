@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { apiRequest, invalidateCache } from '../api/client';
+import { notifyGoalsChanged } from '../utils/submitRefresh';
 import { useAuth } from '../context/AuthContext';
 import {
   Clock,
@@ -212,7 +213,7 @@ export const QuizArenaPage: React.FC = () => {
       setTotalTimeLeftSec((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
-          executeSubmit();
+          executeSubmitRef.current();
           return 0;
         }
         return prev - 1;
@@ -392,6 +393,9 @@ export const QuizArenaPage: React.FC = () => {
       });
       setAttemptResult(data);
       setIsSubmitted(true);
+      // Mastery changed server-side: drop the stale goals/analytics caches and
+      // tell My Topics + Quizzes Arena to re-read live percentages.
+      notifyGoalsChanged();
       await refreshProfile();
     } catch (err: any) {
       alert(`Submission error: ${err.message}`);
@@ -399,6 +403,15 @@ export const QuizArenaPage: React.FC = () => {
       setSubmitting(false);
     }
   };
+
+  // The countdown's guard ref closes over the LATEST submit handler; calling
+  // executeSubmit directly from the interval effect would capture a stale
+  // closure whose `submitting` state never updates, risking a double submit
+  // when the timer fires just as the user clicks Submit.
+  const executeSubmitRef = useRef(executeSubmit);
+  useEffect(() => {
+    executeSubmitRef.current = executeSubmit;
+  });
 
   const formatTimer = (sec: number) => {
     const mins = Math.floor(sec / 60);

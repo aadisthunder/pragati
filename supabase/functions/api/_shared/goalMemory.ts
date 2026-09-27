@@ -22,6 +22,92 @@ export const MAX_SUBTOPIC_NAME_LENGTH = 60;
 export const MAX_GOAL_TITLE_LENGTH = 80;
 export const MAX_CLIENT_GOALS = 8;
 
+/**
+ * Subtopic slug keys that carry a trailing difficulty tier the quiz agent
+ * appends to topics ("Fundamental Data Structures – Beginner" →
+ * "fundamental_data_structures_beginner"). Stripped during matching so a
+ * beginner quiz on a subtopic attributes to that subtopic's single concept
+ * instead of fragmenting mastery across per-difficulty concepts.
+ * Mirrors server/src/services/goalService.ts (production parity).
+ */
+const DIFFICULTY_TIERS = ['beginner', 'intermediate', 'advanced', 'expert'] as const;
+
+export function normalizeTopicKey(topic: string): string {
+  const stripped = String(topic || '')
+    .replace(/\s*(?:[\u2010-\u2015\-:|\u00b7]\s*)?\(\s*(beginner|intermediate|advanced|expert)\s*\)\s*$/i, '')
+    .replace(/\s*[\u2010-\u2015\-:|\u00b7]\s*(beginner|intermediate|advanced|expert)\s*$/i, '')
+    .replace(/\s+level:?\s*(beginner|intermediate|advanced|expert)\s*$/i, '')
+    .trim();
+  return slugifyGoalName(stripped);
+}
+
+export function stripDifficultySuffixKey(slugKey: string): string {
+  return String(slugKey || '').replace(
+    new RegExp(`_(${DIFFICULTY_TIERS.join('|')})$`),
+    ''
+  );
+}
+
+function singularizeKey(key: string): string {
+  return key.replace(/_?s$/, '');
+}
+
+export interface SubtopicKeyInput {
+  name: string;
+  slug: string;
+}
+
+/**
+ * Matches a quiz's topic + question text against a goal's subtopics (deduped).
+ * Slug-based with singular/plural tolerance, difficulty-label stripping, and a
+ * minimum key length guard. Pure; shared by the Edge submit loop and tests.
+ */
+export function findGoalSubtopicMatches(
+  quizTopic: string,
+  questionText: string,
+  subtopics: SubtopicKeyInput[]
+): SubtopicKeyInput[] {
+  const topicKey = normalizeTopicKey(quizTopic);
+  const topicSingular = singularizeKey(topicKey);
+  const textKey = slugifyGoalName(String(questionText || ''));
+
+  const matched: SubtopicKeyInput[] = [];
+  const seen = new Set<string>();
+  for (const st of subtopics || []) {
+    if (!st || !st.name) continue;
+    const nameKey = normalizeTopicKey(st.name);
+    if (nameKey.length < 4) continue; // over-broad containment guard
+    const nameSingular = singularizeKey(nameKey);
+    const slugKey = stripDifficultySuffixKey(slugifyGoalName(st.slug || st.name));
+    const slugSingular = singularizeKey(slugKey);
+
+    const topicMatches =
+      topicKey === nameKey ||
+      topicKey === slugKey ||
+      (nameKey.length >= 4 &&
+        (topicSingular === nameSingular ||
+          topicSingular === slugSingular ||
+          topicKey.startsWith(`${nameKey}_`) ||
+          topicKey.startsWith(`${slugKey}_`) ||
+          topicKey.startsWith(`${nameSingular}_`) ||
+          topicKey.startsWith(`${slugSingular}_`)));
+    const textMatches =
+      textKey.length >= 4 &&
+      (textKey.includes(nameKey) ||
+        textKey.includes(slugKey) ||
+        textKey.includes(nameKey.replace(/_/g, ' ')) ||
+        textKey.includes(slugKey.replace(/_/g, ' ')));
+
+    if (topicMatches || textMatches) {
+      if (!seen.has(nameKey)) {
+        seen.add(nameKey);
+        matched.push(st);
+      }
+    }
+  }
+  return matched;
+}
+
 // ---------------------------------------------------------------------------
 // Subtopic plan parsing (LLM output -> sanitized plan)
 // ---------------------------------------------------------------------------

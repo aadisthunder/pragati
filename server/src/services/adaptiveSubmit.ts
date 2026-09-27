@@ -9,6 +9,7 @@
  * NEVER throws into the submit path: callers wrap it in try/catch.
  */
 import { SupabaseClient } from '@supabase/supabase-js';
+import { findGoalSubtopicMatches } from './goalService.js';
 import {
   updateMastery,
   nextReviewAt,
@@ -86,12 +87,11 @@ export async function runAdaptiveSubmitLoop(
 
   for (const t of telemetry) {
     if (questionToSlugs.has(t.question_id)) continue;
-    const promptLower = String(t.prompt || '').toLowerCase();
-    const matchedFromGoals = goalSubtopics.filter(
-      (st) =>
-        promptLower.includes(st.name.toLowerCase()) ||
-        promptLower.includes(st.slug.replace(/_/g, ' '))
-    );
+    // Fuzzy goal matching first: a subtopic-named quiz ("Fundamental Data
+    // Structures – Beginner") must attribute to that subtopic's concept even
+    // when question text never literally mentions it, otherwise mastery
+    // fragments across per-difficulty concepts and the progress bar stalls.
+    const matchedFromGoals = findGoalSubtopicMatches(topic, t.prompt || '', goalSubtopics);
     if (matchedFromGoals.length > 0) {
       questionToSlugs.set(t.question_id, matchedFromGoals.map((s) => s.slug));
     } else {

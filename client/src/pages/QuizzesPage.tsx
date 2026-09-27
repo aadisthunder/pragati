@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest, apiRequestCached, getFromCache, invalidateCache } from '../api/client';
+import { fetchGoals as fetchGoalsApi, GOALS_UPDATED_EVENT, type GoalWithMastery } from '../api/goals';
 import {
   CheckSquare,
   ArrowRight,
@@ -13,21 +14,21 @@ import {
   Trash2,
   Share2,
   Check,
+  Layers,
 } from 'lucide-react';
 import { getSecondaryBadgeClass, getResponsivePageContainerClass } from '../utils/theme';
 import { buildQuizGeneratePrompt, formatRelativeTime } from '../utils/markdownCards';
+import { groupQuizzesByTopic, type QuizLike } from '../utils/quizGrouping';
+import { TopicQuizBand } from '../components/quizzes/TopicQuizBand';
 
-interface Quiz {
-  id: string;
-  topic: string;
-  difficulty: string;
-  total_questions: number;
-  created_at: string;
+interface Quiz extends QuizLike {
+  created_by?: string;
 }
 
 export const QuizzesPage: React.FC = () => {
   const cachedInitial = getFromCache<{ quizzes: Quiz[] }>('/api/quizzes');
   const [quizzes, setQuizzes] = useState<Quiz[]>(cachedInitial?.quizzes || []);
+  const [goals, setGoals] = useState<GoalWithMastery[]>([]);
   const [loading, setLoading] = useState(!cachedInitial);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeMenuQuizId, setActiveMenuQuizId] = useState<string | null>(null);
@@ -48,8 +49,21 @@ export const QuizzesPage: React.FC = () => {
     }
   };
 
+  const loadGoals = async () => {
+    try {
+      const data = await fetchGoalsApi();
+      setGoals(data);
+    } catch {
+      // Goals are a progressive enhancement here; the page works without them.
+    }
+  };
+
   useEffect(() => {
     fetchQuizzes();
+    loadGoals();
+    const onGoalsUpdated = () => loadGoals();
+    window.addEventListener(GOALS_UPDATED_EVENT, onGoalsUpdated);
+    return () => window.removeEventListener(GOALS_UPDATED_EVENT, onGoalsUpdated);
   }, []);
 
   // Close 3-dot menu on click outside
@@ -93,6 +107,7 @@ export const QuizzesPage: React.FC = () => {
 
   const handleShareQuiz = async (e: React.MouseEvent, quiz: Quiz) => {
     e.stopPropagation();
+    setActiveMenuQuizId(null);
     const shareUrl = `${window.location.origin}/quizzes/${quiz.id}`;
     const shareData = {
       title: `Pragati Quiz: ${quiz.topic}`,
@@ -116,14 +131,71 @@ export const QuizzesPage: React.FC = () => {
     }
   };
 
-  const filteredQuizzes = quizzes.filter((q) => {
-    if (!searchQuery.trim()) return true;
-    const term = searchQuery.toLowerCase();
-    return (
-      q.topic.toLowerCase().includes(term) ||
-      q.difficulty.toLowerCase().includes(term)
-    );
-  });
+  const filteredQuizzes = useMemo(() => {
+    return quizzes.filter((q) => {
+      if (!searchQuery.trim()) return true;
+      const term = searchQuery.toLowerCase();
+      return (
+        q.topic.toLowerCase().includes(term) ||
+        q.difficulty.toLowerCase().includes(term)
+      );
+    });
+  }, [quizzes, searchQuery]);
+
+  const { groups, independents } = useMemo(
+    () => groupQuizzesByTopic(filteredQuizzes, goals),
+    [filteredQuizzes, goals]
+  );
+
+  const quizMenuButton = (quiz: Quiz) => (
+    <div className="relative" onClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        onClick={() => setActiveMenuQuizId(activeMenuQuizId === quiz.id ? null : quiz.id)}
+        aria-label="Quiz Options"
+        className="p-1 text-slate-900 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-slate-200"
+      >
+        <MoreVertical className="w-3.5 h-3.5" />
+      </button>
+
+      {activeMenuQuizId === quiz.id && (
+        <div className="absolute right-0 top-full mt-1.5 w-40 bg-white border border-slate-200 rounded-xl shadow-lg py-1.5 z-30 animate-in fade-in zoom-in-95">
+          <button
+            type="button"
+            onClick={(e) => handleEditWithAI(e, quiz)}
+            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors text-left cursor-pointer"
+          >
+            <Bot className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Edit with AI</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => handleShareQuiz(e, quiz)}
+            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors text-left cursor-pointer"
+          >
+            {copiedQuizId === quiz.id ? (
+              <Check className="w-3.5 h-3.5 text-emerald-600" />
+            ) : (
+              <Share2 className="w-3.5 h-3.5" />
+            )}
+            <span>{copiedQuizId === quiz.id ? 'Link copied!' : 'Share link'}</span>
+          </button>
+
+          <div className="my-1 border-t border-slate-100" />
+
+          <button
+            type="button"
+            onClick={(e) => handleDeleteQuiz(e, quiz.id)}
+            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors text-left cursor-pointer"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+            <span>Delete Quiz</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="h-full w-full max-w-full overflow-y-auto overflow-x-hidden subtle-scroll min-w-0">
@@ -138,7 +210,7 @@ export const QuizzesPage: React.FC = () => {
               </h2>
             </div>
             <p className="text-xs text-slate-500 font-medium mt-1">
-              Attempt curriculum quizzes generated by the Socratic AI agent
+              Tests tied to your topics keep your mastery bars moving; standalone quizzes live below
             </p>
           </div>
 
@@ -165,7 +237,6 @@ export const QuizzesPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Quizzes Grid */}
         {loading ? (
           <div className="py-16 flex flex-col items-center justify-center text-slate-500 gap-2">
             <Loader2 className="w-6 h-6 animate-spin text-slate-700" />
@@ -184,98 +255,98 @@ export const QuizzesPage: React.FC = () => {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 min-w-0">
-            {filteredQuizzes.map((quiz) => (
-              <div
-                key={quiz.id}
-                className="bg-white border border-slate-200 p-5 rounded-2xl flex flex-col justify-between hover:border-slate-300 shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 relative min-w-0"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className={getSecondaryBadgeClass()}>
-                      {quiz.difficulty}
-                    </span>
-
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-mono font-medium text-slate-500">
-                        {formatRelativeTime(quiz.created_at)}
-                      </span>
-
-                      {/* Share Quiz Link Button */}
-                      <button
-                        type="button"
-                        onClick={(e) => handleShareQuiz(e, quiz)}
-                        aria-label="Share Quiz"
-                        title={copiedQuizId === quiz.id ? 'Link copied!' : 'Share quiz link'}
-                        className="p-1 text-slate-900 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-slate-200"
-                      >
-                        {copiedQuizId === quiz.id ? (
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />
-                        ) : (
-                          <Share2 className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-
-                      {/* 3-Dot Action Menu */}
-                      <div className="relative" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setActiveMenuQuizId(
-                              activeMenuQuizId === quiz.id ? null : quiz.id
-                            )
-                          }
-                          aria-label="Quiz Options"
-                          className="p-1 text-slate-900 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-slate-200"
-                        >
-                          <MoreVertical className="w-3.5 h-3.5" />
-                        </button>
-
-                        {activeMenuQuizId === quiz.id && (
-                          <div className="absolute right-0 top-full mt-1.5 w-40 bg-white border border-slate-200 rounded-xl shadow-lg py-1.5 z-30 animate-in fade-in zoom-in-95">
-                            <button
-                              type="button"
-                              onClick={(e) => handleEditWithAI(e, quiz)}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors text-left cursor-pointer"
-                            >
-                              <Bot className="w-3.5 h-3.5 text-indigo-600" />
-                              <span>Edit with AI</span>
-                            </button>
-
-                            <div className="my-1 border-t border-slate-100" />
-
-                            <button
-                              type="button"
-                              onClick={(e) => handleDeleteQuiz(e, quiz.id)}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors text-left cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                              <span>Delete Quiz</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <h3 className="text-sm font-display font-bold text-slate-800 line-clamp-2">
-                    {quiz.topic}
+          <>
+            {/* ---- Linked Topic Groups: bigger boxes, mastery context ---- */}
+            {groups.length > 0 && (
+              <section className="space-y-3">
+                <div className="flex items-center gap-2 pt-1">
+                  <Layers className="w-3.5 h-3.5 text-slate-500" />
+                  <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider font-display">
+                    From your topics
                   </h3>
-                  <p className="text-xs text-slate-500 mt-2 font-mono font-semibold">
-                    {quiz.total_questions} Q/A
-                  </p>
+                  <span className="text-[11px] text-slate-400">
+                    — every attempt here updates mastery in My Topics
+                  </span>
                 </div>
+                {/* One full-width horizontal band per topic: every quiz of that
+                    topic lives in this single band; overflow scrolls sideways
+                    (desktop chevrons, mobile swipe). */}
+                <div className="space-y-5 min-w-0">
+                  {groups.map((group) => (
+                    <TopicQuizBand
+                      key={group.key}
+                      group={group}
+                      onOpenQuiz={(quizId) => navigate(`/quizzes/${quizId}`)}
+                      renderMenu={(quiz) => quizMenuButton(quiz as Quiz)}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
 
-                <button
-                  onClick={() => navigate(`/quizzes/${quiz.id}`)}
-                  className="mt-6 w-full py-2 text-xs font-semibold text-slate-800 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-300 hover:border-slate-400 rounded-xl shadow-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-[0.99] cursor-pointer"
-                >
-                  <span>Attempt Quiz</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
+            {/* ---- Independent (standalone) quizzes ---- */}
+            {independents.length > 0 && (
+              <section className="space-y-3">
+                <div className="flex items-center gap-2 pt-1">
+                  <CheckSquare className="w-3.5 h-3.5 text-slate-500" />
+                  <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider font-display">
+                    Standalone quizzes
+                  </h3>
+                  <span className="text-[11px] text-slate-400">
+                    — one-off tests not tied to a topic
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 min-w-0">
+                  {independents.map((quiz) => (
+                    <div
+                      key={quiz.id}
+                      className="bg-white border border-slate-200 p-5 rounded-2xl flex flex-col justify-between hover:border-slate-300 shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 relative min-w-0"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <span className={getSecondaryBadgeClass()}>{quiz.difficulty}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-mono font-medium text-slate-500">
+                              {formatRelativeTime(quiz.created_at)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => handleShareQuiz(e, quiz)}
+                              aria-label="Share Quiz"
+                              title={copiedQuizId === quiz.id ? 'Link copied!' : 'Share quiz link'}
+                              className="p-1 text-slate-900 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-slate-200"
+                            >
+                              {copiedQuizId === quiz.id ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              ) : (
+                                <Share2 className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                            {quizMenuButton(quiz)}
+                          </div>
+                        </div>
+
+                        <h3 className="text-sm font-display font-bold text-slate-800 line-clamp-2">
+                          {quiz.topic}
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-2 font-mono font-semibold">
+                          {quiz.total_questions} Q/A
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => navigate(`/quizzes/${quiz.id}`)}
+                        className="mt-6 w-full py-2 text-xs font-semibold text-slate-800 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-300 hover:border-slate-400 rounded-xl shadow-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-[0.99] cursor-pointer"
+                      >
+                        <span>Attempt Quiz</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
         )}
       </div>
     </div>

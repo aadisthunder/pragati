@@ -37,6 +37,7 @@ import {
   buildGoalMemoryBlock,
   sanitizeClientGoals,
   slugifyGoalName,
+  findGoalSubtopicMatches,
   MAX_SUBTOPICS_PER_GOAL,
   type GoalMasteryResult,
 } from './_shared/goalMemory.ts';
@@ -1661,8 +1662,36 @@ async function runAdaptiveLoop(
   );
 
   // 2. Attribute each question to concepts (pure; precedence: DB mappings >
-  //    embedded generation tags > keyword match > topic fallback).
+  //    embedded generation tags > goal-subtopic match > keyword match > topic
+  //    fallback). The goal-subtopic step mirrors the Express server: a quiz
+  //    generated from "Test me on <subtopic>" must move THAT subtopic's
+  //    mastery bar even when its questions never literally name it.
+  let goalSubtopicList: Array<{ name: string; slug: string }> = [];
+  try {
+    const { data: userGoals } = await scopedClient
+      .from('learning_goals')
+      .select('title, slug, goal_subtopics(name, slug)')
+      .eq('user_id', userId);
+    for (const g of userGoals || []) {
+      for (const st of (g as any).goal_subtopics || []) {
+        if (st && st.name && st.slug) goalSubtopicList.push({ name: st.name, slug: st.slug });
+      }
+    }
+  } catch {
+    // Non-fatal: attribution falls back to the standard precedence below.
+  }
+
   const questionToSlugs = buildQuestionToSlugs(mappings, telemetry, topic);
+  for (const t of telemetry) {
+    if (questionToSlugs.has(t.question_id)) continue;
+    const matchedGoals = findGoalSubtopicMatches(topic, t.prompt || '', goalSubtopicList);
+    if (matchedGoals.length > 0) {
+      questionToSlugs.set(
+        t.question_id,
+        matchedGoals.map((s) => s.slug)
+      );
+    }
+  }
   const touchedSlugs = Array.from(new Set(Array.from(questionToSlugs.values()).flat()));
   if (touchedSlugs.length === 0) return null;
 

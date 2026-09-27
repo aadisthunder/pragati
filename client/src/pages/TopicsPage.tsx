@@ -22,6 +22,13 @@ import {
   type GoalWithMastery,
 } from '../api/goals';
 import { OnboardingGoalModal } from '../components/onboarding/OnboardingGoalModal';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import {
+  requestConfirmation,
+  dismissConfirmation,
+  beginConfirmation,
+  type PendingConfirmation,
+} from '../utils/confirmAction';
 import { getResponsivePageContainerClass, getPermanentCardClass } from '../utils/theme';
 import { buildTestMePrompt } from '../utils/quizDifficulty';
 
@@ -39,7 +46,7 @@ export const TopicsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [busyGoalId, setBusyGoalId] = useState<string | null>(null);
   const [generatingGoalId, setGeneratingGoalId] = useState<string | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [goalToDelete, setGoalToDelete] = useState<PendingConfirmation | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
   const [subtopicDrafts, setSubtopicDrafts] = useState<Record<string, string>>({});
@@ -67,19 +74,30 @@ export const TopicsPage: React.FC = () => {
     return () => window.removeEventListener(GOALS_UPDATED_EVENT, onGoalsUpdated);
   }, [load]);
 
-  const handleRemoveGoal = async (goal: GoalWithMastery) => {
-    if (confirmDeleteId !== goal.goalId) {
-      setConfirmDeleteId(goal.goalId);
-      return;
-    }
-    setConfirmDeleteId(null);
-    setBusyGoalId(goal.goalId);
+  // Trash icon opens the shared ConfirmDialog (same modal as Delete Chat)
+  // instead of the old two-click pattern.
+  const handleRequestRemoveGoal = (goal: GoalWithMastery) => {
+    setGoalToDelete((cur) => requestConfirmation(cur, goal.goalId));
+  };
+
+  const goalToDeleteTitle =
+    (goals.find((g) => g.goalId === goalToDelete?.id) || null)?.title ?? null;
+
+  const handleConfirmRemoveGoal = async () => {
+    const pending = goalToDelete;
+    const goalId = pending?.id;
+    const armed = beginConfirmation(pending);
+    if (!goalId || !armed) return;
+    setGoalToDelete(armed);
+    setBusyGoalId(goalId);
     try {
-      await deleteGoal(goal.goalId);
+      await deleteGoal(goalId);
       const data = await refreshGoals();
       setGoals(data);
+      setGoalToDelete(null);
     } catch (err: any) {
       setError(err?.message || 'Failed to remove the topic.');
+      setGoalToDelete(dismissConfirmation(armed));
     } finally {
       setBusyGoalId(null);
     }
@@ -242,15 +260,11 @@ export const TopicsPage: React.FC = () => {
                     </div>
                     <button
                       type="button"
-                      onClick={() => handleRemoveGoal(goal)}
+                      onClick={() => handleRequestRemoveGoal(goal)}
                       disabled={isBusy || isGenerating}
-                      title={confirmDeleteId === goal.goalId ? 'Click again to confirm' : 'Remove topic'}
+                      title="Remove topic"
                       aria-label="Remove topic"
-                      className={`p-2 rounded-xl border transition-colors shrink-0 cursor-pointer disabled:opacity-40 ${
-                        confirmDeleteId === goal.goalId
-                          ? 'text-white bg-rose-600 border-rose-600 hover:bg-rose-700'
-                          : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50/70 border-slate-200 hover:border-rose-200'
-                      }`}
+                      className="p-2 rounded-xl border transition-colors shrink-0 cursor-pointer disabled:opacity-40 text-slate-400 hover:text-rose-600 hover:bg-rose-50/70 border-slate-200 hover:border-rose-200"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -379,6 +393,25 @@ export const TopicsPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Remove-topic confirmation — shared ConfirmDialog (same modal as Delete Chat) */}
+      <ConfirmDialog
+        open={goalToDelete !== null}
+        title="Remove topic?"
+        subtitle="This topic and its mastery history will be removed."
+        message={
+          <>
+            Are you sure you want to remove{' '}
+            <strong className="text-slate-900 font-semibold">&ldquo;{goalToDeleteTitle ?? 'this topic'}&rdquo;</strong>
+            ? Quizzes linked to it stay, but mastery tracking for this topic stops.
+          </>
+        }
+        confirmLabel="Remove topic"
+        confirmingLabel="Removing..."
+        busy={goalToDelete?.busy ?? false}
+        onConfirm={handleConfirmRemoveGoal}
+        onCancel={() => setGoalToDelete((cur) => dismissConfirmation(cur))}
+      />
 
       {/* Add-topic modal (reuses the onboarding flow, manual source) */}
       <OnboardingGoalModal

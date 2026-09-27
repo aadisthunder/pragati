@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Target, Loader2, Sparkles, X, Plus, Check, RefreshCw, AlertCircle, ArrowRight } from 'lucide-react';
 import { handleModalBackdropClick } from '../../utils/theme';
+import { SUGGESTION_CHIPS, getGoalSuggestionChipClass } from './suggestionTopics';
 import {
   generateSubtopics,
   createGoal,
@@ -170,7 +171,7 @@ export const OnboardingGoalModal: React.FC<OnboardingGoalModalProps> = ({
       aria-label="Set your mastery goal"
     >
       <div
-        className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto subtle-scroll cursor-default animate-in zoom-in-95 duration-300"
+        className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-xl max-h-[92vh] overflow-y-auto subtle-scroll cursor-default animate-in zoom-in-95 duration-300"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -213,6 +214,27 @@ export const OnboardingGoalModal: React.FC<OnboardingGoalModalProps> = ({
               placeholder="e.g. Calculus, Organic Chemistry, World History..."
               className="w-full px-4 py-3 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 transition-all"
             />
+            {/* One-click starter topics (great for first-time users and judges) */}
+            <div className="flex flex-wrap gap-1.5" aria-label="Suggested topics">
+              {SUGGESTION_CHIPS.map((chip) => {
+                const active = topic.trim().toLowerCase() === chip.toLowerCase();
+                return (
+                  <button
+                    key={chip}
+                    type="button"
+                    disabled={generating}
+                    aria-pressed={active}
+                    onClick={() => {
+                      setTopic(chip);
+                      topicInputRef.current?.focus();
+                    }}
+                    className={getGoalSuggestionChipClass(active)}
+                  >
+                    {chip}
+                  </button>
+                );
+              })}
+            </div>
             <button
               type="submit"
               disabled={!topic.trim() || generating}
