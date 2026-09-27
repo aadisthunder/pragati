@@ -388,6 +388,10 @@ export interface GoalLinkRowLike {
   id: string;
   title: string;
   slug: string;
+  /** Optional joined subtopics — quizzes are often named after a SUBTOPIC
+   * ("Basic Data Structures" under a "DSA" goal), so linkage must consider
+   * subtopic names/slugs too, or goal deletion strands those quizzes. */
+  subtopics?: Array<{ name: string; slug: string }>;
 }
 
 export interface QuizInsertRowLike {
@@ -421,8 +425,62 @@ export function resolveGoalLinkage(
     if (key.length >= 4 && titleKey.startsWith(`${key}_`)) return { goalId: goal.id };
     if (slugKey.length >= 4 && key.startsWith(`${slugKey}_`)) return { goalId: goal.id };
     if (key.length >= 4 && slugKey.startsWith(`${key}_`)) return { goalId: goal.id };
+    // Subtopic-named quizzes: "Basic Data Structures – Beginner" under a
+    // "DSA" goal whose subtopic is "Basic Data Structures".
+    for (const st of goal.subtopics || []) {
+      if (!st) continue;
+      const stKey = normalizeTopicKey(st.name) || slugifyGoalName(st.slug || '');
+      if (!stKey || stKey.length < 4) continue;
+      const stSingular = stKey.replace(/_?s$/, '');
+      const keySingular = key.replace(/_?s$/, '');
+      if (
+        key === stKey ||
+        keySingular === stSingular ||
+        key.startsWith(`${stKey}_`) ||
+        key.startsWith(`${stSingular}_`)
+      ) {
+        return { goalId: goal.id };
+      }
+    }
   }
   return null;
+}
+
+export interface OrphanSweepResult {
+  deleted: number;
+  quizIds: string[];
+}
+
+/**
+ * Erases already-orphaned quizzes: unlinked rows (goal_linkage IS NULL —
+ * created before the linkage column existed, or after their goal was deleted)
+ * whose topic matches NO current goal/subtopic. The single quizzes delete lets
+ * the schema's FK cascades remove attempts, telemetry, and mappings. RLS
+ * scopes every read/write to the caller. Mirrored in _shared/goalMemory.ts.
+ */
+export async function sweepUnlinkedQuizzesForGoals(
+  scopedClient: SupabaseClient,
+  goalRows: GoalLinkRowLike[],
+  _userId: string
+): Promise<OrphanSweepResult> {
+  const { data: unlinked, error } = await scopedClient
+    .from('quizzes')
+    .select('id, topic')
+    .is('goal_linkage', null);
+  if (error) throw new Error(error.message);
+
+  const orphans = (unlinked || []).filter(
+    (q: any) => q?.id && !resolveGoalLinkage(q.topic, goalRows)
+  );
+  const orphanIds = orphans.map((q: any) => q.id);
+  if (orphanIds.length === 0) return { deleted: 0, quizIds: [] };
+
+  const { error: delError } = await scopedClient
+    .from('quizzes')
+    .delete()
+    .in('id', orphanIds);
+  if (delError) throw new Error(delError.message);
+  return { deleted: orphanIds.length, quizIds: orphanIds };
 }
 
 /**

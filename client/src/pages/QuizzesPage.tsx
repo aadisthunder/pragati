@@ -256,8 +256,12 @@ export const QuizzesPage: React.FC = () => {
           </div>
         ) : (
           <>
-            {/* ---- Linked Topic Groups: bigger boxes, mastery context ---- */}
-            {groups.length > 0 && (
+            {/* ---- Linked Topic Groups: one full-width band per topic ----
+                Goal-less (orphaned) groups stay OUT of this section: their
+                topic was deleted from My Topics, so showing a band here would
+                imply a live topic link that no longer exists. They surface as
+                standalone quizzes below instead. */}
+            {groups.filter((group) => group.goal).length > 0 && (
               <section className="space-y-3">
                 <div className="flex items-center gap-2 pt-1">
                   <Layers className="w-3.5 h-3.5 text-slate-500" />
@@ -272,14 +276,16 @@ export const QuizzesPage: React.FC = () => {
                     topic lives in this single band; overflow scrolls sideways
                     (desktop chevrons, mobile swipe). */}
                 <div className="space-y-5 min-w-0">
-                  {groups.map((group) => (
-                    <TopicQuizBand
-                      key={group.key}
-                      group={group}
-                      onOpenQuiz={(quizId) => navigate(`/quizzes/${quizId}`)}
-                      renderMenu={(quiz) => quizMenuButton(quiz as Quiz)}
-                    />
-                  ))}
+                  {groups
+                    .filter((group) => group.goal)
+                    .map((group) => (
+                      <TopicQuizBand
+                        key={group.key}
+                        group={group}
+                        onOpenQuiz={(quizId) => navigate(`/quizzes/${quizId}`)}
+                        renderMenu={(quiz) => quizMenuButton(quiz as Quiz)}
+                      />
+                    ))}
                 </div>
               </section>
             )}

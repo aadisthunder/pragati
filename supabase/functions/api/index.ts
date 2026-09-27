@@ -40,6 +40,7 @@ import {
   findGoalSubtopicMatches,
   buildQuizInsertRow,
   insertQuizRow,
+  sweepUnlinkedQuizzesForGoals,
   MAX_SUBTOPICS_PER_GOAL,
   type GoalMasteryResult,
   type GoalLinkRowLike,
@@ -705,7 +706,23 @@ Deno.serve(async (req: Request) => {
       // via quizzes.goal_linkage (plus those quizzes' attempts/telemetry).
       const { error } = await supabase.from('learning_goals').delete().eq('id', goalMatch[1]);
       if (error) return errorResponse(error.message, 500);
-      return jsonResponse({ success: true });
+
+      // Post-delete sweep: erase orphaned unlinked quizzes whose topic matches
+      // no current goal/subtopic (covers pre-migration quizzes). Best-effort.
+      let swept: { deleted: number; quizIds: string[] } | null = null;
+      try {
+        const goalsData = await loadGoalMastery(supabase, userId);
+        const goalRows = goalsData.map((g) => ({
+          id: g.goalId || '',
+          title: g.title,
+          slug: slugifyGoalName(g.title),
+          subtopics: g.subtopics.map((s) => ({ name: s.name, slug: s.slug })),
+        }));
+        swept = await sweepUnlinkedQuizzesForGoals(supabase, goalRows, userId);
+      } catch (sweepErr) {
+        console.error('orphan quiz sweep failed (non-fatal):', sweepErr);
+      }
+      return jsonResponse({ success: true, swept });
     }
 
     if (path === '/onboarding/complete' && req.method === 'POST') {
@@ -1041,10 +1058,16 @@ Deno.serve(async (req: Request) => {
                 // the schema cascade. Standalone quizzes get null. Non-fatal.
                 let goalRows: GoalLinkRowLike[] = [];
                 try {
+                  // Subtopics joined: quizzes are often named after a subtopic.
                   const { data: links } = await supabase
                     .from('learning_goals')
-                    .select('id, title, slug');
-                  goalRows = links || [];
+                    .select('id, title, slug, goal_subtopics(name, slug)');
+                  goalRows = (links || []).map((g: any) => ({
+                    id: g.id,
+                    title: g.title,
+                    slug: g.slug,
+                    subtopics: (g.goal_subtopics || []).map((s: any) => ({ name: s.name, slug: s.slug })),
+                  }));
                 } catch (linkErr) {
                   console.error('goal-linkage load failed (non-fatal):', linkErr);
                 }

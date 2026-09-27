@@ -5,6 +5,7 @@ import {
   loadGoalMastery,
   slugifyGoalName,
   deleteGoalCascade,
+  sweepUnlinkedQuizzesForGoals,
   MAX_SUBTOPICS_PER_GOAL,
 } from '../services/goalService.js';
 
@@ -190,13 +191,32 @@ goalsRouter.delete('/:id/subtopics/:sid', async (req: AuthenticatedRequest, res:
 
 // DELETE /api/goals/:id - Remove a goal. The schema's ON DELETE CASCADE
 // erases its subtopics AND every quiz linked via quizzes.goal_linkage (plus
-// those quizzes' attempts, telemetry, and concept mappings).
+// those quizzes' attempts, telemetry, and concept mappings). A post-delete
+// sweep then erases any remaining ORPHANED unlinked quizzes whose topic
+// matches no current goal/subtopic (covers pre-migration quizzes).
 goalsRouter.delete('/:id', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const scopedClient = createScopedClient(req.token!);
+  const userId = req.user!.id;
 
   try {
     await deleteGoalCascade(scopedClient, req.params.id);
-    res.json({ success: true });
+    // Sweep AFTER the goal is gone: any unlinked quiz whose topic no longer
+    // matches a current goal is orphaned and must not linger in the Quizzes
+    // Arena. Best-effort: a sweep failure must not fail the delete itself.
+    let swept: { deleted: number; quizIds: string[] } | null = null;
+    try {
+      const goals = await loadGoalMastery(scopedClient, userId);
+      const goalRows = goals.map((g) => ({
+        id: g.goalId || '',
+        title: g.title,
+        slug: slugifyGoalName(g.title),
+        subtopics: g.subtopics.map((s) => ({ name: s.name, slug: s.slug })),
+      }));
+      swept = await sweepUnlinkedQuizzesForGoals(scopedClient, goalRows, userId);
+    } catch (sweepErr: any) {
+      console.error('orphan quiz sweep failed (non-fatal):', sweepErr?.message || sweepErr);
+    }
+    res.json({ success: true, swept });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

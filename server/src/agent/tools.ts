@@ -205,10 +205,17 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
         // progressive enhancement; generation must not fail without it.
         let goalRows: GoalLinkRowLike[] = [];
         try {
+          // Subtopics are joined because quizzes are often named after a
+          // subtopic, not the goal title — linkage must see both.
           const { data: links } = await supabaseClient
             .from('learning_goals')
-            .select('id, title, slug');
-          goalRows = links || [];
+            .select('id, title, slug, goal_subtopics(name, slug)');
+          goalRows = (links || []).map((g: any) => ({
+            id: g.id,
+            title: g.title,
+            slug: g.slug,
+            subtopics: (g.goal_subtopics || []).map((s: any) => ({ name: s.name, slug: s.slug })),
+          }));
         } catch (linkErr: any) {
           console.error('goal-linkage load failed (non-fatal):', linkErr?.message || linkErr);
         }
