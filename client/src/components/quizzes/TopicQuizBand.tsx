@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Target, ArrowRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import { getPermanentCardClass, getSecondaryBadgeClass } from '../../utils/theme';
 import {
   getNextScrollLeft,
@@ -15,16 +15,11 @@ interface TopicQuizBandProps {
   renderMenu: (quiz: QuizLike) => React.ReactNode;
 }
 
-function masteryBarColor(pct: number): string {
-  if (pct >= 80) return 'bg-emerald-600';
-  if (pct >= 40) return 'bg-slate-800';
-  return 'bg-slate-400';
-}
-
 /**
  * One full-width horizontal band per linked topic: a fixed-height card (same
  * scale as one grid card) whose quiz cards overflow into a horizontal scroll.
- * Desktop gets prev/next chevron arrows that page through the row.
+ * Desktop gets prev/next chevron arrows that page through the row. The header
+ * is deliberately minimal — just the topic heading.
  */
 export const TopicQuizBand: React.FC<TopicQuizBandProps> = ({ group, onOpenQuiz, renderMenu }) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -51,53 +46,14 @@ export const TopicQuizBand: React.FC<TopicQuizBandProps> = ({ group, onOpenQuiz,
     el.scrollTo({ left: getNextScrollLeft(el, direction), behavior: 'smooth' });
   };
 
-  const masteryPct = group.subtopic?.masteryPct ?? group.goal?.masteryPct ?? null;
-  const attemptCount = group.quizzes.length;
-
   return (
     <div className={`${getPermanentCardClass()} overflow-hidden min-w-0`}>
-      {/* Band header: topic identity + mastery context */}
-      <div className="flex items-start justify-between gap-3 p-4 sm:p-5 pb-3">
-        <div className="min-w-0">
-          {group.goal ? (
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider font-display px-2 py-0.5 rounded-full border border-slate-900 bg-slate-900 text-white">
-              <Target className="w-3 h-3" />
-              <span className="truncate max-w-[220px]">{group.goal.title}</span>
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider font-display px-2 py-0.5 rounded-full border border-slate-200 bg-slate-50 text-slate-600">
-              <Target className="w-3 h-3 text-slate-400" />
-              Topic practice
-            </span>
-          )}
-          <h4 className="text-base sm:text-lg font-display font-extrabold text-slate-900 mt-1.5 line-clamp-1">
-            {group.subtopic?.name || group.label}
-          </h4>
-          <p className="text-[11px] font-mono text-slate-400 mt-0.5">
-            {attemptCount} test{attemptCount > 1 ? 's' : ''} · last{' '}
-            {formatRelativeTime(group.quizzes[0].created_at)}
-          </p>
-        </div>
-        {masteryPct !== null && (
-          <div className="text-right shrink-0">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-display block">
-              Mastery
-            </span>
-            <span className="text-xl font-black font-mono text-slate-900">{masteryPct}%</span>
-          </div>
-        )}
+      {/* Minimal header: just the topic heading */}
+      <div className="px-4 sm:px-5 pt-4 pb-3">
+        <h4 className="text-base sm:text-lg font-display font-extrabold text-slate-900 line-clamp-1">
+          {group.subtopic?.name || group.label}
+        </h4>
       </div>
-
-      {masteryPct !== null && (
-        <div className="px-4 sm:px-5 pb-3">
-          <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${masteryBarColor(masteryPct)}`}
-              style={{ width: `${Math.max(1, Math.min(100, masteryPct))}%` }}
-            />
-          </div>
-        </div>
-      )}
 
       {/* Horizontal quiz row: overflow scrolls sideways (mobile swipe, desktop arrows) */}
       <div className="relative">
