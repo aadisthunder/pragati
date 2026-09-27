@@ -4,6 +4,7 @@ import { createScopedClient } from '../config/supabase.js';
 import {
   loadGoalMastery,
   slugifyGoalName,
+  deleteGoalCascade,
   MAX_SUBTOPICS_PER_GOAL,
 } from '../services/goalService.js';
 
@@ -187,13 +188,14 @@ goalsRouter.delete('/:id/subtopics/:sid', async (req: AuthenticatedRequest, res:
   }
 });
 
-// DELETE /api/goals/:id - Remove a goal (cascades to its subtopics)
+// DELETE /api/goals/:id - Remove a goal. The schema's ON DELETE CASCADE
+// erases its subtopics AND every quiz linked via quizzes.goal_linkage (plus
+// those quizzes' attempts, telemetry, and concept mappings).
 goalsRouter.delete('/:id', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const scopedClient = createScopedClient(req.token!);
 
   try {
-    const { error } = await scopedClient.from('learning_goals').delete().eq('id', req.params.id);
-    if (error) throw error;
+    await deleteGoalCascade(scopedClient, req.params.id);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

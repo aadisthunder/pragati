@@ -23,6 +23,7 @@ import {
 } from '../api/goals';
 import { OnboardingGoalModal } from '../components/onboarding/OnboardingGoalModal';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { notifyGoalDeleted } from '../utils/deleteRefresh';
 import {
   requestConfirmation,
   dismissConfirmation,
@@ -92,6 +93,10 @@ export const TopicsPage: React.FC = () => {
     setBusyGoalId(goalId);
     try {
       await deleteGoal(goalId);
+      // Server cascade erased the goal, its subtopics, and every quiz linked
+      // to it (quizzes.goal_linkage). Drop every goal-derived client cache so
+      // the Quizzes Arena stops showing the deleted topic immediately.
+      notifyGoalDeleted();
       const data = await refreshGoals();
       setGoals(data);
       setGoalToDelete(null);

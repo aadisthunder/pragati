@@ -38,9 +38,18 @@ import {
   sanitizeClientGoals,
   slugifyGoalName,
   findGoalSubtopicMatches,
+  buildQuizInsertRow,
+  insertQuizRow,
   MAX_SUBTOPICS_PER_GOAL,
   type GoalMasteryResult,
+  type GoalLinkRowLike,
 } from './_shared/goalMemory.ts';
+import {
+  compactMissedQuestions,
+  compactAttempts,
+  clampHistoryForTokenBudget,
+  withGroqRetry,
+} from './_shared/tokenBudget.ts';
 
 const allowedOrigins = [
   'https://pragati-aadi.web.app',
@@ -692,6 +701,8 @@ Deno.serve(async (req: Request) => {
 
     const goalMatch = path.match(/^\/goals\/([a-zA-Z0-9_-]+)$/);
     if (goalMatch && req.method === 'DELETE') {
+      // Schema-level ON DELETE CASCADE erases subtopics AND every quiz linked
+      // via quizzes.goal_linkage (plus those quizzes' attempts/telemetry).
       const { error } = await supabase.from('learning_goals').delete().eq('id', goalMatch[1]);
       if (error) return errorResponse(error.message, 500);
       return jsonResponse({ success: true });
@@ -929,8 +940,9 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      // Cap to latest 15 turns
-      const boundedHistory = sanitizedHistory.slice(-15);
+      // Cap to latest 15 turns, then clamp to a total character budget so a
+      // long conversation cannot exceed Groq's per-minute token cap by itself.
+      const boundedHistory = clampHistoryForTokenBudget(sanitizedHistory.slice(-15));
 
       // ---------------------------------------------------------------------
       // Tool-calling agent loop (mirrors the Express server's LangChain agent)
@@ -952,20 +964,23 @@ Deno.serve(async (req: Request) => {
       const maxIterations = 3;
       let assistantMessage: any = null;
 
+      // Token budget: retry Groq 429s (org TPM cap) honoring retry-after.
       const callGroq = (messages: any[], withTools: boolean) =>
-        fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${groqApiKey}`,
-          },
-          body: JSON.stringify({
-            model: Deno.env.get('GROQ_MODEL') || 'openai/gpt-oss-120b',
-            messages,
-            temperature: 0.7,
-            ...(withTools ? { tools: AGENT_TOOL_SPECS, tool_choice: 'auto' } : {}),
-          }),
-        });
+        withGroqRetry(() =>
+          fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${groqApiKey}`,
+            },
+            body: JSON.stringify({
+              model: Deno.env.get('GROQ_MODEL') || 'openai/gpt-oss-120b',
+              messages,
+              temperature: 0.7,
+              ...(withTools ? { tools: AGENT_TOOL_SPECS, tool_choice: 'auto' } : {}),
+            }),
+          })
+        );
 
       let iteration = 0;
       while (iteration < maxIterations) {
@@ -1020,17 +1035,32 @@ Deno.serve(async (req: Request) => {
                 // Normalize/backfill per-question concept tags before persisting
                 normalizeConceptTags(parsed, parsed.topic || args.topic);
 
-                // 2) Persist quiz + questions with Row Level Security intact
-                const { data: quizRow, error: quizError } = await supabase
-                  .from('quizzes')
-                  .insert({
-                    created_by: userId,
-                    topic: parsed.topic || args.topic,
-                    difficulty: parsed.difficulty || args.difficulty,
-                    total_questions: questionsList.length,
-                  })
-                  .select()
-                  .single();
+                // 2) Persist quiz + questions with Row Level Security intact.
+                // Resolve goal linkage first: quizzes generated from a learning
+                // goal carry goal_linkage so deleting that goal erases them via
+                // the schema cascade. Standalone quizzes get null. Non-fatal.
+                let goalRows: GoalLinkRowLike[] = [];
+                try {
+                  const { data: links } = await supabase
+                    .from('learning_goals')
+                    .select('id, title, slug');
+                  goalRows = links || [];
+                } catch (linkErr) {
+                  console.error('goal-linkage load failed (non-fatal):', linkErr);
+                }
+
+                const { data: quizRow, error: quizError } = await insertQuizRow(
+                  supabase,
+                  buildQuizInsertRow(
+                    {
+                      created_by: userId,
+                      topic: parsed.topic || args.topic,
+                      difficulty: parsed.difficulty || args.difficulty,
+                      total_questions: questionsList.length,
+                    },
+                    goalRows
+                  )
+                );
 
                 if (quizError || !quizRow) {
                   toolResult = JSON.stringify({
@@ -1338,7 +1368,9 @@ Deno.serve(async (req: Request) => {
                   action: 'QUESTIONS_TO_REVIEW_RETRIEVED',
                   has_questions: list.length > 0,
                   total_missed: list.length,
-                  questions: list,
+                  // Token budget: cap to 5, truncate text, drop telemetry noise —
+                  // this dump re-sends on every loop iteration.
+                  questions: compactMissedQuestions(list, 5),
                   message: list.length === 0 ? 'Great job! You have zero unreviewed missed questions.' : undefined,
                 });
               }

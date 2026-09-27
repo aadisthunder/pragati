@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { apiRequest } from '../api/client';
+import { apiRequest, clearUserCache } from '../api/client';
 
 export interface UserProfile {
   id: string;
@@ -132,6 +132,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    // Isolation: the API cache is module-global; wipe it (and any in-flight
+    // dedup) so the next sign-in in this tab never sees the previous
+    // account's goals/quizzes/analytics.
+    clearUserCache();
     setUser(null);
     setSession(null);
     setProfile(null);

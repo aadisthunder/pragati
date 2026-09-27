@@ -237,6 +237,20 @@ create index if not exists idx_learning_goals_user on public.learning_goals (use
 create index if not exists idx_goal_subtopics_goal on public.goal_subtopics (goal_id);
 create index if not exists idx_goal_subtopics_user on public.goal_subtopics (user_id);
 
+-- Quizzes ↔ goals linkage: which goal a quiz was generated from ("Test me on
+-- my learning goal"). Nullable — standalone quizzes have no goal. Deleting
+-- the goal erases its quizzes (and, through their own cascades, attempts,
+-- telemetry, and question_concepts). Added via ALTER because quizzes is
+-- created before learning_goals in this file.
+alter table public.quizzes
+  add column if not exists goal_linkage uuid references public.learning_goals (id) on delete cascade;
+create index if not exists idx_quizzes_goal_linkage on public.quizzes (goal_linkage);
+
+-- Scalability: every quizzes read/write is RLS-filtered on created_by and the
+-- list endpoint sorts by created_at; index both so per-user scans stay cheap
+-- as the table grows.
+create index if not exists idx_quizzes_created_by on public.quizzes (created_by, created_at desc);
+
 -- Indexes for the agent's hot read paths (learner state fetch, due reviews).
 create index if not exists idx_learner_concept_state_user on public.learner_concept_state (user_id);
 create index if not exists idx_learner_concept_state_review on public.learner_concept_state (user_id, next_review_at);

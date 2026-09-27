@@ -380,6 +380,88 @@ export function findGoalSubtopicMatches(
 }
 
 // ---------------------------------------------------------------------------
+// Quiz ↔ goal linkage (delete-a-topic erases its quizzes)
+// ---------------------------------------------------------------------------
+
+/** Minimal shape of a learning_goals row needed to resolve a quiz's linkage. */
+export interface GoalLinkRowLike {
+  id: string;
+  title: string;
+  slug: string;
+}
+
+export interface QuizInsertRowLike {
+  created_by: string;
+  topic: string;
+  difficulty: string;
+  total_questions: number;
+  goal_linkage?: string | null;
+}
+
+/**
+ * Resolves which learning goal a quiz topic belongs to, if any. Matching is
+ * slug-based: exact title/slug equality, or a goal-title prefix relationship
+ * ("Calculus Functions" ↔ "Calculus") — the same tolerance family as
+ * findGoalSubtopicMatches. Pure function, mirrored in the Edge _shared copy.
+ */
+export function resolveGoalLinkage(
+  quizTopic: string,
+  goalRows: GoalLinkRowLike[]
+): { goalId: string } | null {
+  const key = normalizeTopicKey(quizTopic);
+  if (!key) return null;
+  for (const goal of goalRows || []) {
+    if (!goal || !goal.id) continue;
+    const titleKey = normalizeTopicKey(goal.title);
+    const slugKey = slugifyGoalName(goal.slug || goal.title);
+    if (key === titleKey || key === slugKey) return { goalId: goal.id };
+    // Subdomain topics: "Calculus Functions" under a "Calculus" goal (both
+    // directions), guarded to ≥4 chars so short slugs never over-match.
+    if (titleKey.length >= 4 && key.startsWith(`${titleKey}_`)) return { goalId: goal.id };
+    if (key.length >= 4 && titleKey.startsWith(`${key}_`)) return { goalId: goal.id };
+    if (slugKey.length >= 4 && key.startsWith(`${slugKey}_`)) return { goalId: goal.id };
+    if (key.length >= 4 && slugKey.startsWith(`${key}_`)) return { goalId: goal.id };
+  }
+  return null;
+}
+
+/**
+ * Builds the quizzes insert row with goal_linkage resolved. Standalone topics
+ * get goal_linkage: null so the column stays clean (DB cascade only fires for
+ * genuinely linked quizzes). Pure function shared by Express and Edge.
+ */
+export function buildQuizInsertRow(
+  base: Omit<QuizInsertRowLike, 'goal_linkage'>,
+  goalRows: GoalLinkRowLike[]
+): QuizInsertRowLike {
+  const linkage = resolveGoalLinkage(base.topic, goalRows);
+  return { ...base, goal_linkage: linkage ? linkage.goalId : null };
+}
+
+/**
+ * Performs the quizzes insert with deploy-order tolerance: if the database
+ * has not yet received the goal_linkage migration (PGRST204 "Could not find
+ * the 'goal_linkage' column"), retry ONCE without the column so quiz
+ * generation degrades to pre-linkage behavior instead of breaking. Any other
+ * error propagates untouched.
+ */
+export async function insertQuizRow(
+  scopedClient: SupabaseClient,
+  row: QuizInsertRowLike
+): Promise<{ data: any; error: any; linkageDropped: boolean }> {
+  const { data, error } = await scopedClient.from('quizzes').insert(row).select().single();
+  if (!error) return { data, error, linkageDropped: false };
+
+  const columnMissing =
+    error.code === 'PGRST204' || /goal_linkage/i.test(String(error.message || ''));
+  if (!columnMissing) return { data, error, linkageDropped: false };
+
+  const { goal_linkage: _dropped, ...withoutLinkage } = row;
+  const retry = await scopedClient.from('quizzes').insert(withoutLinkage).select().single();
+  return { data: retry.data, error: retry.error, linkageDropped: true };
+}
+
+// ---------------------------------------------------------------------------
 // Shared DB loader (routes + chat agent)
 // ---------------------------------------------------------------------------
 
@@ -415,4 +497,18 @@ export async function loadGoalMastery(
       .map((s: any) => ({ id: s.id, name: s.name, slug: s.slug }));
     return { ...computeGoalMastery(g.title, subtopics, learnerStates), goalId: g.id };
   });
+}
+
+/**
+ * Deletes a learning goal. The database's ON DELETE CASCADE handles the
+ * destruction order (goal → subtopics → linked quizzes → their attempts,
+ * telemetry, and question_concepts), so the application layer performs the
+ * single goal delete and propagates any error verbatim.
+ */
+export async function deleteGoalCascade(
+  scopedClient: SupabaseClient,
+  goalId: string
+): Promise<void> {
+  const { error } = await scopedClient.from('learning_goals').delete().eq('id', goalId);
+  if (error) throw new Error(error.message);
 }

@@ -60,6 +60,18 @@ export function invalidateCache(pattern?: string): void {
 }
 
 /**
+ * Wipe the entire cache and abandon in-flight deduplicated requests.
+ *
+ * Called on auth identity changes (sign-out / account switch): the cache is
+ * module-global and would otherwise serve the previous account's goals,
+ * quizzes, and analytics to whoever signs in next in the same tab.
+ */
+export function clearUserCache(): void {
+  cacheStore.clear();
+  inFlightRequests.clear();
+}
+
+/**
  * Fetches data with in-flight deduplication and caching
  */
 export async function fetchWithDeduplication<T>(
@@ -74,6 +86,9 @@ export async function fetchWithDeduplication<T>(
 
   const promise = fetcher()
     .then((data) => {
+      // A concurrent clearUserCache() (identity switch) must win: never repopulate
+      // the cache for an identity that has already been wiped.
+      if (!inFlightRequests.has(key)) return data;
       setInCache(key, data, ttlMs);
       inFlightRequests.delete(key);
       return data;

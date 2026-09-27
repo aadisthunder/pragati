@@ -5,9 +5,10 @@ import {
   setInCache,
   invalidateCache,
   fetchWithDeduplication,
+  clearUserCache,
 } from './cache';
 
-export { getFromCache, isCacheFresh, setInCache, invalidateCache };
+export { getFromCache, isCacheFresh, setInCache, invalidateCache, clearUserCache };
 
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';

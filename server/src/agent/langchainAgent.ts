@@ -2,6 +2,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, AIMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
 import { createScopedClient } from '../config/supabase.js';
 import { createAgentTools, sanitizeToolArgs } from './tools.js';
+import { clampHistoryForTokenBudget, retryOnGroqRateLimit } from './tokenBudget.js';
 import {
   buildGoalMemoryBlock,
   sanitizeClientGoals,
@@ -280,7 +281,10 @@ export async function processAgentChat(
 ) {
   onStep?.({ phase: 'thinking', text: 'AI Instructor is thinking...' });
 
-  const cleanHistory = sanitizeChatHistory(history);
+  // Token budget: Groq's org-level TPM cap is small (8K on the free/dev tier);
+  // 20 unclamped turns plus fat tool dumps can exceed it in ONE request and
+  // 429 the whole turn. Keep the most recent history within a char budget.
+  const cleanHistory = clampHistoryForTokenBudget(sanitizeChatHistory(history));
   const scopedClient = createScopedClient(userToken);
   const llm = getLLM(process.env.GROQ_MODEL || 'openai/gpt-oss-120b', 0.2);
   const tools = createAgentTools(scopedClient, userId, llm);
@@ -317,8 +321,12 @@ export async function processAgentChat(
   }
   messages.push(new HumanMessage(userMessage));
 
-  // Run model with multi-step tool calling support (up to 3 iterations)
-  let aiResponse = await llmWithTools.invoke(messages);
+  // Run model with multi-step tool calling support (up to 3 iterations).
+  // Every LLM call goes through retryOnGroqRateLimit: ChatOpenAI surfaces a
+  // Groq 429 (org TPM cap) as a thrown error; we wait out Groq's retry-after
+  // and retry instead of surfacing an error card to the student.
+  const invokeWithRetry = (msgs: any[]) => retryOnGroqRateLimit(() => llmWithTools.invoke(msgs));
+  let aiResponse = await invokeWithRetry(messages);
   const toolExecutions: any[] = [];
   const maxIterations = 3;
   let iteration = 0;
@@ -384,7 +392,7 @@ export async function processAgentChat(
     }
 
     onStep?.({ phase: 'analyzing', text: 'Formulating step-by-step guidance...' });
-    aiResponse = await llmWithTools.invoke(messages);
+    aiResponse = await invokeWithRetry(messages);
   }
 
   let rawContent = typeof aiResponse.content === 'string' 

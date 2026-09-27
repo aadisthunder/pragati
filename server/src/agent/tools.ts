@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { tool } from '@langchain/core/tools';
 import { ChatOpenAI } from '@langchain/openai';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { loadGoalMastery } from '../services/goalService.js';
+import { loadGoalMastery, buildQuizInsertRow, insertQuizRow, type GoalLinkRowLike } from '../services/goalService.js';
+import { compactMissedQuestions, compactAttempts } from './tokenBudget.js';
 import { tagQuestionsWithConcepts, slugifyConceptName } from '../services/masteryCore.js';
 
 export const getLearningGoalsSchema = z.object({});
@@ -197,17 +198,35 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
           });
         }
 
-        // Save to Supabase
-        const { data: quiz, error: quizError } = await supabaseClient
-          .from('quizzes')
-          .insert({
-            created_by: userId,
-            topic: parsed.topic || topic,
-            difficulty: parsed.difficulty || difficulty,
-            total_questions: questionsList.length,
-          })
-          .select()
-          .single();
+        // Resolve goal linkage before saving: quizzes generated from a
+        // learning goal ("Test me on my learning goal") carry goal_linkage so
+        // deleting that goal in My Topics erases them via the schema cascade.
+        // Standalone quizzes get goal_linkage: null. Non-fatal: linkage is a
+        // progressive enhancement; generation must not fail without it.
+        let goalRows: GoalLinkRowLike[] = [];
+        try {
+          const { data: links } = await supabaseClient
+            .from('learning_goals')
+            .select('id, title, slug');
+          goalRows = links || [];
+        } catch (linkErr: any) {
+          console.error('goal-linkage load failed (non-fatal):', linkErr?.message || linkErr);
+        }
+
+        // Save to Supabase (tolerant of a DB that hasn't received the
+        // goal_linkage migration yet — degrades to unlinked quizzes).
+        const { data: quiz, error: quizError } = await insertQuizRow(
+          supabaseClient,
+          buildQuizInsertRow(
+            {
+              created_by: userId,
+              topic: parsed.topic || topic,
+              difficulty: parsed.difficulty || difficulty,
+              total_questions: questionsList.length,
+            },
+            goalRows
+          )
+        );
 
         if (quizError || !quiz) {
           return JSON.stringify({
@@ -353,7 +372,9 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
         if (error) return `Error fetching quiz history: ${error.message}`;
         if (!attempts || attempts.length === 0) return 'The student has not attempted any quizzes yet.';
 
-        return JSON.stringify(attempts);
+        // Token budget: attempts dumps re-enter the prompt on every agent-loop
+        // iteration; keep only the fields the reply needs.
+        return JSON.stringify(compactAttempts(attempts, limit || 5));
       } catch (err: any) {
         return `Error: ${err.message}`;
       }
@@ -378,10 +399,13 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
         if (!telemetry || telemetry.length === 0) return `No telemetry records found for attempt ID ${attempt_id}.`;
 
         const missed = telemetry.filter(t => !t.is_correct || t.is_skipped);
+        // Token budget: compact the missed questions (truncated prompt/options/
+        // explanation, telemetry noise dropped) so one turn cannot exhaust the
+        // org's per-minute token cap.
         return JSON.stringify({
           total_answered: telemetry.length,
           missed_or_skipped_count: missed.length,
-          questions: telemetry,
+          questions: compactMissedQuestions(missed, 5),
         });
       } catch (err: any) {
         return `Error: ${err.message}`;
@@ -553,12 +577,15 @@ Return ONLY a valid JSON object matching this exact structure, with no markdown 
 
         const topics = Array.from(new Set(list.map((q: any) => q.topic)));
 
+        // Token budget: this dump is the single largest payload in the chat
+        // (10 full questions × prompt + options + explanation), and it re-sends
+        // on every loop iteration. Cap to 5, truncate text, drop telemetry noise.
         return JSON.stringify({
           action: 'QUESTIONS_TO_REVIEW_RETRIEVED',
           has_questions: true,
           total_missed: list.length,
           topics,
-          questions: list,
+          questions: compactMissedQuestions(list, 5),
         });
       } catch (err: any) {
         return JSON.stringify({
