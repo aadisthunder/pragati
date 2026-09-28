@@ -81,6 +81,12 @@ export async function apiRequest<T = any>(
         ...options,
         headers,
       });
+    } else {
+      // Refresh token is dead: reset auth state so AuthContext clears the
+      // user and ProtectedRoute redirects to /login. Without this, pages
+      // render logged-out empty states ("No quizzes generated yet") that
+      // masquerade as real data.
+      await supabase.auth.signOut();
     }
   }
 

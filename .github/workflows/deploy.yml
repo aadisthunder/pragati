@@ -37,6 +37,11 @@ jobs:
 
       - name: Run client tests
         working-directory: client
+        env:
+          # Placeholder config so module imports validate (supabase client is
+          # created at import time); tests never make real network calls.
+          VITE_SUPABASE_URL: https://placeholder.supabase.co
+          VITE_SUPABASE_ANON_KEY: placeholder-anon-key
         run: npm test
 
       - name: Install server dependencies
