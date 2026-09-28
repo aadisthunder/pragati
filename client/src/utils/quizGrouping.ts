@@ -35,12 +35,10 @@ export interface GoalLike {
 export interface LinkedQuizGroup {
   /** Normalized topic key shared by every quiz in the group. */
   key: string;
-  /** Display topic: the most recent quiz's raw topic. */
+  /** Display heading: the goal title (matches the My Topics card heading). */
   label: string;
   quizzes: QuizLike[];
   goal: GoalLike | null;
-  /** The goal subtopic whose name/slug matches the topic, when identifiable. */
-  subtopic: GoalSubtopicLike | null;
 }
 
 /** Mirror of goalService.normalizeTopicKey for the client (difficulty-label aware). */
@@ -90,12 +88,12 @@ export function groupQuizzesByTopic(
   }
 
   // A topic is "goal-linked" when it matches a goal title, a subtopic name, or a subtopic slug.
-  const findGoalFor = (key: string): { goal: GoalLike | null; subtopic: GoalSubtopicLike | null } => {
+  const findGoalFor = (key: string): GoalLike | null => {
     const keySingular = singularize(key);
     for (const goal of goals || []) {
       const titleKey = buildTopicKey(goal.title);
       if (titleKey && (titleKey === key || singularize(titleKey) === keySingular)) {
-        return { goal, subtopic: null };
+        return goal;
       }
       for (const st of goal.subtopics || []) {
         const nameKey = buildTopicKey(st.name) || st.slug;
@@ -106,32 +104,56 @@ export function groupQuizzesByTopic(
           key.startsWith(`${nameKey}_`) ||
           key.startsWith(`${stSingular}_`)
         ) {
-          return { goal, subtopic: st };
+          return goal;
         }
       }
     }
-    return { goal: null, subtopic: null };
+    return null;
   };
 
   const groups: LinkedQuizGroup[] = [];
   const independents: QuizLike[] = [];
 
+  // One band per goal: My Topics shows a single card titled e.g. "System
+  // Design", so the Quizzes page shows a single band with that same heading,
+  // collecting every quiz whose topic matches the goal's title or any subtopic.
+  const byGoal = new Map<string, LinkedQuizGroup>();
+
   for (const [key, list] of byKey.entries()) {
-    const { goal, subtopic } = findGoalFor(key);
-    if (list.length >= 2 || goal) {
+    const goal = findGoalFor(key);
+    if (goal) {
+      const existing = byGoal.get(goal.goalId);
+      if (existing) {
+        existing.quizzes.push(...list);
+      } else {
+        byGoal.set(goal.goalId, {
+          key,
+          label: goal.title,
+          quizzes: [...list],
+          goal,
+        });
+      }
+    } else if (list.length >= 2) {
       groups.push({
         key,
         label: list[0].topic,
         quizzes: list,
-        goal,
-        subtopic,
+        goal: null,
       });
     } else {
       independents.push(...list);
     }
   }
+  groups.push(...byGoal.values());
 
-  // Groups by most recent activity; independents by recency too.
+  // Sort every goal band's quizzes newest-first; groups by most recent activity.
+  for (const group of groups) {
+    if (group.goal) {
+      group.quizzes.sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+    }
+  }
   groups.sort(
     (a, b) =>
       new Date(b.quizzes[0].created_at).getTime() - new Date(a.quizzes[0].created_at).getTime()

@@ -465,16 +465,21 @@ export interface OrphanSweepResult {
 }
 
 /**
- * Erases already-orphaned quizzes: unlinked rows (goal_linkage IS NULL —
- * created before the linkage column existed, or after their goal was deleted)
- * whose topic matches NO current goal/subtopic. The single quizzes delete lets
- * the schema's FK cascades remove attempts, telemetry, and mappings. RLS
- * scopes every read/write to the caller. Mirrored in goalService.ts.
+ * Erases already-orphaned quizzes SCOPE TO THE DELETED GOAL: unlinked rows
+ * (goal_linkage IS NULL — created before the linkage column existed) whose
+ * topic derives from the goal being deleted (its title, slug, or subtopics).
+ *
+ * SCOPE BUG (live-certification lesson): an earlier version swept ALL
+ * unlinked quizzes matching no current goal — that erased the seeded judge
+ * demo quiz and users' genuine standalone one-offs. Deleting ONE topic must
+ * only take quizzes OF that topic. Everything else stays.
+ *
+ * Mirrored in goalService.ts.
  */
-export async function sweepUnlinkedQuizzesForGoals(
+export async function sweepUnlinkedQuizzesForTopics(
   scopedClient: { from: (table: string) => any },
-  goalRows: GoalLinkRowLike[],
-  _userId: string
+  deletedGoal: GoalLinkRowLike,
+  currentGoalRows: GoalLinkRowLike[]
 ): Promise<OrphanSweepResult> {
   const { data: unlinked, error } = await scopedClient
     .from('quizzes')
@@ -482,9 +487,12 @@ export async function sweepUnlinkedQuizzesForGoals(
     .is('goal_linkage', null);
   if (error) throw new Error(error.message);
 
-  const orphans = (unlinked || []).filter(
-    (q: any) => q?.id && !resolveGoalLinkage(q.topic, goalRows)
-  );
+  const orphans = (unlinked || []).filter((q: any) => {
+    if (!q?.id) return false;
+    const belongsToDeletedGoal = resolveGoalLinkage(q.topic, [deletedGoal]) !== null;
+    const belongsToCurrentGoal = resolveGoalLinkage(q.topic, currentGoalRows) !== null;
+    return belongsToDeletedGoal && !belongsToCurrentGoal;
+  });
   const orphanIds = orphans.map((q: any) => q.id);
   if (orphanIds.length === 0) return { deleted: 0, quizIds: [] };
 

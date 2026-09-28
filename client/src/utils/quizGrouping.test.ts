@@ -43,7 +43,7 @@ describe('groupQuizzesByTopic', () => {
     expect(independents.map((q) => q.id)).toEqual(['q3']);
   });
 
-  it('links a group to a goal whose subtopic matches the quiz topic', () => {
+  it('links a subtopic quiz to its goal band, headed by the goal title like My Topics', () => {
     const goals = [
       {
         goalId: 'g1',
@@ -59,7 +59,7 @@ describe('groupQuizzesByTopic', () => {
     const { groups, independents } = groupQuizzesByTopic(quizzes, goals);
     expect(independents).toHaveLength(0);
     expect(groups[0].goal?.goalId).toBe('g1');
-    expect(groups[0].subtopic?.name).toBe('Fundamental Data Structures');
+    expect(groups[0].label).toBe('DSA');
   });
 
   it('sorts quizzes inside a group newest-first', () => {
@@ -76,6 +76,37 @@ describe('groupQuizzesByTopic', () => {
     const { groups, independents } = groupQuizzesByTopic(quizzes, []);
     expect(groups).toHaveLength(0);
     expect(independents.map((q) => q.id)).toEqual(['q1']);
+  });
+
+  it('merges every subtopic quiz of one goal into a single band headed by the topic name', () => {
+    // My Topics shows one card per goal titled e.g. "System Design"; the
+    // Quizzes page must show exactly one band per goal with that same
+    // heading, no matter which subtopic each quiz was generated from.
+    const goals = [
+      {
+        goalId: 'g1',
+        title: 'System Design',
+        masteryPct: 0,
+        subtopics: [
+          { id: 's1', name: 'Scalability Fundamentals', slug: 'scalability_fundamentals', masteryPct: 0, attempts: 0 },
+          { id: 's2', name: 'Caching Strategies', slug: 'caching_strategies', masteryPct: 0, attempts: 0 },
+          { id: 's3', name: 'Load Balancing & Distribution', slug: 'load_balancing_distribution', masteryPct: 0, attempts: 0 },
+        ],
+      },
+    ];
+    const quizzes = [
+      quiz('q1', 'Load Balancing & Distribution – Beginner'),
+      quiz('q2', 'Caching Strategies – Intermediate', '2026-09-21T10:00:00Z'),
+      quiz('q3', 'Scalability Fundamentals – Beginner', '2026-09-22T10:00:00Z'),
+    ];
+
+    const { groups, independents } = groupQuizzesByTopic(quizzes, goals);
+
+    expect(independents).toHaveLength(0);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].goal?.goalId).toBe('g1');
+    expect(groups[0].label).toBe('System Design');
+    expect(groups[0].quizzes.map((q) => q.id)).toEqual(['q3', 'q2', 'q1']);
   });
 
   it('tolerates missing fields and empty inputs', () => {

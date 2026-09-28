@@ -40,7 +40,7 @@ import {
   findGoalSubtopicMatches,
   buildQuizInsertRow,
   insertQuizRow,
-  sweepUnlinkedQuizzesForGoals,
+  sweepUnlinkedQuizzesForTopics,
   MAX_SUBTOPICS_PER_GOAL,
   type GoalMasteryResult,
   type GoalLinkRowLike,
@@ -702,23 +702,39 @@ Deno.serve(async (req: Request) => {
 
     const goalMatch = path.match(/^\/goals\/([a-zA-Z0-9_-]+)$/);
     if (goalMatch && req.method === 'DELETE') {
+      // Capture the goal's topics BEFORE deletion (needed to scope the sweep).
+      const { data: deletedGoalRow } = await supabase
+        .from('learning_goals')
+        .select('id, title, slug, goal_subtopics(name, slug)')
+        .eq('id', goalMatch[1])
+        .maybeSingle();
+
       // Schema-level ON DELETE CASCADE erases subtopics AND every quiz linked
       // via quizzes.goal_linkage (plus those quizzes' attempts/telemetry).
       const { error } = await supabase.from('learning_goals').delete().eq('id', goalMatch[1]);
       if (error) return errorResponse(error.message, 500);
 
-      // Post-delete sweep: erase orphaned unlinked quizzes whose topic matches
-      // no current goal/subtopic (covers pre-migration quizzes). Best-effort.
+      // Post-delete sweep, scoped to the deleted goal: erase only unlinked
+      // quizzes whose topic derives from THIS goal. Seeded demo quizzes and
+      // genuine standalone one-offs are never touched. Best-effort.
       let swept: { deleted: number; quizIds: string[] } | null = null;
       try {
-        const goalsData = await loadGoalMastery(supabase, userId);
-        const goalRows = goalsData.map((g) => ({
-          id: g.goalId || '',
-          title: g.title,
-          slug: slugifyGoalName(g.title),
-          subtopics: g.subtopics.map((s) => ({ name: s.name, slug: s.slug })),
-        }));
-        swept = await sweepUnlinkedQuizzesForGoals(supabase, goalRows, userId);
+        if (deletedGoalRow) {
+          const goalsData = await loadGoalMastery(supabase, userId);
+          const currentGoalRows = goalsData.map((g) => ({
+            id: g.goalId || '',
+            title: g.title,
+            slug: slugifyGoalName(g.title),
+            subtopics: g.subtopics.map((s) => ({ name: s.name, slug: s.slug })),
+          }));
+          const deletedGoal = {
+            id: deletedGoalRow.id,
+            title: deletedGoalRow.title,
+            slug: deletedGoalRow.slug,
+            subtopics: (deletedGoalRow.goal_subtopics || []).map((s: any) => ({ name: s.name, slug: s.slug })),
+          };
+          swept = await sweepUnlinkedQuizzesForTopics(supabase, deletedGoal, currentGoalRows);
+        }
       } catch (sweepErr) {
         console.error('orphan quiz sweep failed (non-fatal):', sweepErr);
       }

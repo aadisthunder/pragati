@@ -48,10 +48,10 @@ export const TopicQuizBand: React.FC<TopicQuizBandProps> = ({ group, onOpenQuiz,
 
   return (
     <div className={`${getPermanentCardClass()} overflow-hidden min-w-0`}>
-      {/* Minimal header: just the topic heading */}
+      {/* Minimal header: the goal title, identical to the My Topics card heading */}
       <div className="px-4 sm:px-5 pt-4 pb-3">
         <h4 className="text-base sm:text-lg font-display font-extrabold text-slate-900 line-clamp-1">
-          {group.subtopic?.name || group.label}
+          {group.goal ? group.goal.title : group.label}
         </h4>
       </div>
 
