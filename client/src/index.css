@@ -4,6 +4,16 @@
 @tailwind utilities;
 
 @layer base {
+  html, body, #root {
+    height: 100%;
+    height: 100dvh;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Plus Jakarta Sans', sans-serif;
     letter-spacing: -0.025em;
@@ -91,6 +101,10 @@
     color: #0F172A;
   }
 
+  .subtle-scroll {
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
   .subtle-scroll::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -115,6 +129,26 @@
     scrollbar-width: none;
   }
 
+  /* Dynamic Viewport and Safe-Area Utilities */
+  .h-dvh {
+    height: 100vh;
+    height: 100dvh;
+  }
+  .min-h-dvh {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+  .max-h-dvh {
+    max-height: 100vh;
+    max-height: 100dvh;
+  }
+  .safe-pb {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .safe-pt {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
   /* Desktop-only subtle scrollbar (pairs with .no-scrollbar for mobile-hidden) */
   @media (min-width: 768px) {
     .md-subtle-scroll::-webkit-scrollbar {
@@ -136,11 +170,21 @@
 }
 
 /* Touch & Mobile Hover Suppression: eliminate swipe jitter and sticky hover states */
-@media (hover: none), (max-width: 768px) {
+@media (hover: none), (pointer: coarse), (max-width: 768px) {
   [class*="hover:-translate"],
   [class*="hover:translate"],
   [class*="hover:scale"] {
     transform: none !important;
+  }
+
+  /* Prevent sticky card hover shadows and background tinting while scrolling */
+  .hover\:shadow-lg:hover,
+  .hover\:shadow-md:hover {
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1) !important;
+  }
+
+  .hover\:bg-slate-50:hover {
+    background-color: transparent !important;
   }
 
   .glass-card:hover {

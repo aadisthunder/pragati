@@ -30,7 +30,12 @@ import {
   beginConfirmation,
   type PendingConfirmation,
 } from '../utils/confirmAction';
-import { getResponsivePageContainerClass, getPermanentCardClass } from '../utils/theme';
+import {
+  getResponsivePageContainerClass,
+  getPageHeaderTitleWrapperClass,
+  getScrollablePageContainerClass,
+  getPermanentCardClass,
+} from '../utils/theme';
 import { buildTestMePrompt } from '../utils/quizDifficulty';
 
 const MAX_SUBTOPICS = 6;
@@ -183,11 +188,11 @@ export const TopicsPage: React.FC = () => {
   };
 
   return (
-    <div className="h-full w-full max-w-full overflow-y-auto overflow-x-hidden subtle-scroll min-w-0">
+    <div className={getScrollablePageContainerClass()}>
       <div className={getResponsivePageContainerClass()}>
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-          <div className="pl-14 sm:pl-0 min-h-[42px] flex items-center">
+        <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-200">
+          <div className={getPageHeaderTitleWrapperClass()}>
             <h2 className="text-xl sm:text-2xl font-display font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
               <Target className="w-5 h-5 sm:w-6 sm:h-6 text-slate-800" />
               <span>My Topics</span>
@@ -196,7 +201,7 @@ export const TopicsPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setShowAddModal(true)}
-            className="hidden sm:inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors shadow-xs shrink-0 cursor-pointer"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors shadow-xs shrink-0 cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add Topic</span>

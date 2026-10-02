@@ -434,7 +434,7 @@ export const QuizArenaPage: React.FC = () => {
     const masteryDeltas = attemptResult.masteryDeltas || [];
     const trace = attemptResult.trace || [];
     return (
-      <div className="h-full overflow-y-auto subtle-scroll">
+      <div className="h-full overflow-y-auto overscroll-y-contain subtle-scroll">
         <div className="max-w-4xl mx-auto w-full p-4 md:p-8 space-y-6 font-sans">
           {/* Score Card */}
           <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 text-center shadow-xs">

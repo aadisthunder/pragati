@@ -391,7 +391,7 @@ export const InstructorPage: React.FC = () => {
 
       {/* Case 1: Centered Hero Layout on New/Empty Chat */}
       {messages.length === 0 && !loading ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-4 max-w-3xl mx-auto w-full text-center space-y-6 animate-in fade-in duration-300">
+        <div className="flex-1 flex flex-col items-center justify-center p-4 pt-16 sm:p-4 max-w-3xl mx-auto w-full text-center space-y-6 animate-in fade-in duration-300">
           <div className="space-y-3 flex flex-col items-center">
             <img
               src="/logo.png"
@@ -476,7 +476,7 @@ export const InstructorPage: React.FC = () => {
         /* Case 2: Conversation Message Feed & Floating Bottom Dock */
         <>
           {/* Scrollable Message Feed - one clearance band for the floating dock (no double spacer), pt-14 provides mobile clearance below floating buttons */}
-          <div className={`flex-1 overflow-y-auto subtle-scroll px-3 sm:px-4 md:px-6 pt-14 sm:pt-4 ${getChatFeedPaddingClass('desktop')}`}>
+          <div className={`flex-1 overflow-y-auto overscroll-y-contain subtle-scroll px-3 sm:px-4 md:px-6 pt-14 sm:pt-4 ${getChatFeedPaddingClass('desktop')}`}>
             {/* Dock budget lives in chatLayoutSpacing.ts (208px desktop / 224px mobile). */}
             <div className="w-full max-w-3xl mx-auto space-y-4 sm:space-y-6">
               {/* Chat Messages Feed */}

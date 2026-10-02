@@ -8,6 +8,7 @@ import {
   getMobileBackdropClass,
   getFloatingMenuButtonClass,
   getFloatingNewChatButtonClass,
+  getAppShellContainerClass,
 } from '../../utils/theme';
 import { apiRequest, apiRequestCached, invalidateCache, getFromCache } from '../../api/client';
 import { OnboardingGoalModal } from '../onboarding/OnboardingGoalModal';
@@ -228,7 +229,7 @@ export const AppShell: React.FC = () => {
   const navItems = buildSidebarNavItems();
 
   return (
-    <div className="flex h-screen bg-white text-slate-900 overflow-hidden font-sans">
+    <div className={getAppShellContainerClass()}>
       {/* First-login popup sequence: feature tour, then the goal modal (also
           fires every load for the demo accounts) */}
       <FeatureTourModal open={showTour} onClose={handleTourClose} />
@@ -398,7 +399,7 @@ export const AppShell: React.FC = () => {
       </aside>
 
       {/* Main Content Area - Pure White Background */}
-      <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-white relative">
+      <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-white relative overscroll-none">
         {/* Floating Mobile Navigation Corner Buttons (< 768px) */}
         {!/^\/quizzes\/[^/]+$/.test(location.pathname) && (
           <button
@@ -424,7 +425,7 @@ export const AppShell: React.FC = () => {
           </button>
         )}
 
-        <div className="relative z-10 flex-1 flex flex-col h-full min-h-0 bg-white overflow-hidden">
+        <div className="relative z-10 flex-1 flex flex-col h-full min-h-0 bg-white overflow-hidden overscroll-none">
           <Outlet />
         </div>
       </main>

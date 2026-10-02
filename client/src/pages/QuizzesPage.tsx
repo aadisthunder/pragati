@@ -16,7 +16,12 @@ import {
   Check,
   Layers,
 } from 'lucide-react';
-import { getSecondaryBadgeClass, getResponsivePageContainerClass } from '../utils/theme';
+import {
+  getSecondaryBadgeClass,
+  getResponsivePageContainerClass,
+  getPageHeaderTitleWrapperClass,
+  getScrollablePageContainerClass,
+} from '../utils/theme';
 import { buildQuizGeneratePrompt, formatRelativeTime } from '../utils/markdownCards';
 import { groupQuizzesByTopic, type QuizLike } from '../utils/quizGrouping';
 import { TopicQuizBand } from '../components/quizzes/TopicQuizBand';
@@ -198,17 +203,15 @@ export const QuizzesPage: React.FC = () => {
   );
 
   return (
-    <div className="h-full w-full max-w-full overflow-y-auto overflow-x-hidden subtle-scroll min-w-0">
+    <div className={getScrollablePageContainerClass()}>
       <div className={getResponsivePageContainerClass()}>
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-          <div className="w-full sm:w-auto">
-            <div className="pl-14 sm:pl-0 min-h-[42px] flex items-center">
-              <h2 className="text-xl sm:text-2xl font-display font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
-                <CheckSquare className="w-5 h-5 sm:w-6 sm:h-6 text-slate-800" />
-                <span>Quizzes Arena</span>
-              </h2>
-            </div>
+          <div className={getPageHeaderTitleWrapperClass()}>
+            <h2 className="text-xl sm:text-2xl font-display font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
+              <CheckSquare className="w-5 h-5 sm:w-6 sm:h-6 text-slate-800" />
+              <span>Quizzes Arena</span>
+            </h2>
             <p className="text-xs text-slate-500 font-medium mt-1">
               Tests tied to your topics keep your mastery bars moving; standalone quizzes live below
             </p>

@@ -29,6 +29,8 @@ import {
 import { buildTutorMissedPrompt } from '../utils/markdownCards';
 import {
   getResponsivePageContainerClass,
+  getPageHeaderTitleWrapperClass,
+  getScrollablePageContainerClass,
   formatDeltaBadge,
   getPermanentCardClass,
   getMetricStatTypographyClass,
@@ -122,17 +124,15 @@ export const AnalyticsPage: React.FC = () => {
   };
 
   return (
-    <div className="h-full w-full max-w-full overflow-y-auto overflow-x-hidden subtle-scroll min-w-0">
+    <div className={getScrollablePageContainerClass()}>
       <div className={getResponsivePageContainerClass()}>
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-          <div className="w-full sm:w-auto">
-            <div className="pl-14 sm:pl-0 min-h-[42px] flex items-center">
-              <h2 className="text-xl sm:text-2xl font-display font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
-                <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 text-slate-800" />
-                <span>Student Analytics</span>
-              </h2>
-            </div>
+          <div className={getPageHeaderTitleWrapperClass()}>
+            <h2 className="text-xl sm:text-2xl font-display font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
+              <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 text-slate-800" />
+              <span>Student Analytics</span>
+            </h2>
             <p className="text-xs text-slate-500 font-medium mt-1">
               Cognitive telemetry, dwell time distribution, and topic mastery curves
             </p>

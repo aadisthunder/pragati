@@ -74,6 +74,27 @@ export function getResponsivePageContainerClass(): string {
 }
 
 /**
+ * Header title & subtitle wrapper class ensuring clearance for floating mobile hamburger button
+ */
+export function getPageHeaderTitleWrapperClass(): string {
+  return 'w-full sm:w-auto pl-14 sm:pl-0 min-h-[42px] flex flex-col justify-center';
+}
+
+/**
+ * Scrollable container class with dynamic dvh height, touch scrolling, and overscroll containment
+ */
+export function getScrollablePageContainerClass(): string {
+  return 'h-full w-full max-w-full overflow-y-auto overscroll-y-contain overflow-x-hidden subtle-scroll min-w-0';
+}
+
+/**
+ * Root AppShell container class locking viewport to 100dvh and containing overflow
+ */
+export function getAppShellContainerClass(): string {
+  return 'flex h-screen h-[100dvh] max-h-[100dvh] bg-white text-slate-900 overflow-hidden font-sans';
+}
+
+/**
  * Format color-coded upgrade/downgrade delta badges for ratings and accuracy
  * Returns null if delta is null, undefined, or 0
  */

@@ -5,6 +5,9 @@ import {
   getSuggestionChipsContainerClass,
   getHeroSuggestionChipsContainerClass,
   getResponsivePageContainerClass,
+  getPageHeaderTitleWrapperClass,
+  getScrollablePageContainerClass,
+  getAppShellContainerClass,
   formatDeltaBadge,
 } from './theme';
 
@@ -63,6 +66,26 @@ describe('Theme and Layout Utilities', () => {
       const containerClass = getResponsivePageContainerClass();
       expect(containerClass).toContain('max-w-5xl');
       expect(containerClass).toContain('mx-auto');
+    });
+
+    it('page header title wrapper ensures pl-14 mobile clearance and sm:pl-0 desktop reset', () => {
+      const headerClass = getPageHeaderTitleWrapperClass();
+      expect(headerClass).toContain('pl-14');
+      expect(headerClass).toContain('sm:pl-0');
+    });
+
+    it('scrollable page container includes overscroll-y-contain and subtle-scroll', () => {
+      const scrollClass = getScrollablePageContainerClass();
+      expect(scrollClass).toContain('overscroll-y-contain');
+      expect(scrollClass).toContain('overflow-y-auto');
+      expect(scrollClass).toContain('subtle-scroll');
+    });
+
+    it('app shell container enforces dynamic viewport dvh and overflow containment', () => {
+      const shellClass = getAppShellContainerClass();
+      expect(shellClass).toContain('h-screen');
+      expect(shellClass).toContain('h-[100dvh]');
+      expect(shellClass).toContain('overflow-hidden');
     });
   });
 
