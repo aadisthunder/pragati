@@ -88,25 +88,46 @@ The AI Instructor is an autonomous **LangChain Tool-Calling Agent** running insi
 - **Endpoint**: `https://api.groq.com/openai/v1`
 - **Authentication**: `process.env.GROQ_API_KEY`
 - **Default Reasoning Model**: `openai/gpt-oss-120b` (sub-300ms ultra-fast inference and strong Socratic reasoning on Groq LPU hardware) with fallback to `llama-3.3-70b-versatile`.
-- **Multimodal Vision Model**: `qwen/qwen3.6-27b` for textbook problem OCR and diagram mathematical reasoning.
+- **Multimodal Vision Model**: `qwen/qwen3.8-27b` for textbook problem OCR and diagram mathematical reasoning.
+
+### Token Budget Management & Context Shrinking (Groq 8K TPM Cap)
+Groq's developer tier enforces an **8,000 Tokens Per Minute (TPM)** quota on reasoning models like `openai/gpt-oss-120b`. Long multi-turn conversations, LaTeX blocks, and verbose tool outputs can easily exceed this cap. Pragati employs a four-layer proactive defense in both Express and the Supabase Edge Function:
+1. **Dynamic Context Shrinking (`shrinkContextForTokenBudget`)**:
+   - Accurately estimates tokens across all assembled messages.
+   - If estimated tokens exceed the safe context headroom (`GROQ_MAX_CONTEXT_TOKENS = 5,500`), the engine dynamically prunes oldest conversation turns while preserving the system prompt, learning memory, and the latest user turn.
+   - Oversized single messages or bulky tool outputs are cleanly truncated with a notice (`[...context truncated to stay within Groq 8k token limit...]`).
+2. **Compact Tool Payloads**:
+   - `compactMissedQuestions` truncates question prompts, options, and explanations to the essentials needed for tutoring, reducing payload size by ~70%.
+   - `compactAttempts` retains only score, accuracy, topic, and difficulty.
+3. **Turn Clamping (`clampHistoryForTokenBudget`)**:
+   - Clamps raw chat history to a character budget before assembling agent messages.
+4. **Resilient Rate-Limit Backoff (`withGroqRetry` / `retryOnGroqRateLimit`)**:
+   - Automatically detects 429 rate limit responses, extracts Groq's exact `retry-after` header, and waits out the reset window instead of returning an error card to the student.
 
 ### Dedicated Agent Tools
-1. **`generate_quiz(topic, difficulty, num_questions)`**:
+1. **`check_topic_mastery(topic)`**:
+   - Checks the student's live mastery score, subtopics, and recommends difficulty level (Beginner/Intermediate/Advanced).
+2. **`get_learning_goals()`**:
+   - Retrieves active learning goals and roadmap progress.
+3. **`generate_quiz(topic, difficulty, num_questions)`**:
    - Dynamically constructs a pedagogical assessment with multiple choice questions, options, hints, and explanations.
    - Inserts the generated quiz and questions into Supabase.
-   - Returns the created quiz ID and summary for the student.
-2. **`get_student_attempts()`**:
+   - Interactive quiz cards render directly in the chat UI without leaking spoilers in text.
+4. **`get_student_attempts()`**:
    - Fetches the current student's quiz history, scores, and dates.
-3. **`get_attempt_telemetry(attempt_id)`**:
+5. **`get_attempt_telemetry(attempt_id)`**:
    - Retrieves granular performance metrics: dwell time per question, hints requested, and identifies questions the student missed or skipped.
-4. **`explain_missed_question(question_id)`**:
+6. **`get_questions_to_review()`**:
+   - Fetches struggling questions and explanations from recent attempts for Socratic tutoring.
+7. **`explain_missed_question(question_id)`**:
    - Fetches the missed question prompt, the student's incorrect selection, and the correct rationale to deliver targeted Socratic remediation.
 
 ### Multimodal Vision Pipeline
 1. Student captures physical textbook problem or uploads diagram via the snapshot camera dock.
 2. Client compresses image below 1MB to prevent bandwidth exhaustion.
-3. Backend passes base64 payload to Groq's high-speed multimodal vision model (`qwen/qwen3.6-27b`).
+3. Backend passes base64 payload to Groq's high-speed multimodal vision model (`qwen/qwen3.8-27b`).
 4. Extracted mathematical expressions and LaTeX are fed into the Socratic AI Instructor prompt for step-by-step guidance.
+
 
 ---
 

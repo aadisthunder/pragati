@@ -3,12 +3,14 @@ import {
   compactMissedQuestions as compactMissedQuestionsEdge,
   compactAttempts as compactAttemptsEdge,
   clampHistoryForTokenBudget as clampHistoryEdge,
+  shrinkContextForTokenBudget as shrinkContextEdge,
   withGroqRetry as withGroqRetryEdge,
 } from '../../../supabase/functions/api/_shared/tokenBudget';
 import {
   compactMissedQuestions as compactMissedQuestionsServer,
   compactAttempts as compactAttemptsServer,
   clampHistoryForTokenBudget as clampHistoryServer,
+  shrinkContextForTokenBudget as shrinkContextServer,
 } from '../agent/tokenBudget';
 
 const fatMissed = [
@@ -64,4 +66,15 @@ describe('tokenBudget parity (server ↔ Edge)', () => {
     expect(edge.status).toBe(200);
     expect(edgeCalls).toBe(2);
   });
+
+  it('shrinkContextForTokenBudget produces identical output in both copies', () => {
+    const messages = [
+      { role: 'system', content: 'System message' },
+      { role: 'user', content: 'm1: ' + 'x'.repeat(1200) },
+      { role: 'assistant', content: 'm2: ' + 'y'.repeat(1200) },
+      { role: 'user', content: 'm3: ' + 'z'.repeat(400) },
+    ];
+    expect(shrinkContextEdge(messages, 500)).toEqual(shrinkContextServer(messages, 500));
+  });
 });
+

@@ -49,6 +49,7 @@ import {
   compactMissedQuestions,
   compactAttempts,
   clampHistoryForTokenBudget,
+  shrinkContextForTokenBudget,
   withGroqRetry,
 } from './_shared/tokenBudget.ts';
 
@@ -997,7 +998,7 @@ Deno.serve(async (req: Request) => {
       const maxIterations = 3;
       let assistantMessage: any = null;
 
-      // Token budget: retry Groq 429s (org TPM cap) honoring retry-after.
+      // Token budget: shrink context if it approaches 8k TPM cap, and retry on 429 honoring retry-after.
       const callGroq = (messages: any[], withTools: boolean) =>
         withGroqRetry(() =>
           fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -1008,7 +1009,7 @@ Deno.serve(async (req: Request) => {
             },
             body: JSON.stringify({
               model: Deno.env.get('GROQ_MODEL') || 'openai/gpt-oss-120b',
-              messages,
+              messages: shrinkContextForTokenBudget(messages),
               temperature: 0.7,
               ...(withTools ? { tools: AGENT_TOOL_SPECS, tool_choice: 'auto' } : {}),
             }),

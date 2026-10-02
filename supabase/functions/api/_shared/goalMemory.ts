@@ -354,6 +354,8 @@ export interface GoalMemoryGoal {
   title: string;
   masteryPct: number;
   subtopics: Array<{ name: string; masteryPct: number }>;
+  /** Student-maintained context file for this topic (chat picker "context note"). */
+  contextNote?: string;
 }
 
 /**
@@ -365,7 +367,7 @@ export interface GoalMemoryGoal {
  * when the conversation genuinely touches a goal topic, and to answer
  * anything else normally. No keyword gating happens here.
  */
-export function buildGoalMemoryBlock(goals: GoalMemoryGoal[]): string {
+export function buildGoalMemoryBlock(goals: GoalMemoryGoal[], activeGoalTitle?: string): string {
   if (!goals || goals.length === 0) return '';
 
   const lines: string[] = [
@@ -373,14 +375,34 @@ export function buildGoalMemoryBlock(goals: GoalMemoryGoal[]): string {
     'The student is actively working toward mastery of these learning goals:',
   ];
 
-  for (const goal of goals) {
+  const ordered = [...goals].sort((a, b) => {
+    if (activeGoalTitle) {
+      if (a.title === activeGoalTitle) return -1;
+      if (b.title === activeGoalTitle) return 1;
+    }
+    return 0;
+  });
+
+  for (const goal of ordered) {
+    const isActive = Boolean(activeGoalTitle) && goal.title === activeGoalTitle;
     const subList =
       goal.subtopics && goal.subtopics.length > 0
         ? goal.subtopics.map((s) => `${s.name} (${s.masteryPct}%)`).join(', ')
         : 'subtopics not yet chosen';
-    lines.push(`- ${goal.title}: ${goal.masteryPct}% mastered. Subtopics: ${subList}.`);
+    lines.push(`- ${isActive ? 'ACTIVE: ' : ''}${goal.title}: ${goal.masteryPct}% mastered. Subtopics: ${subList}.`);
+    if (isActive && goal.contextNote && goal.contextNote.trim()) {
+      lines.push(`  Student context for ${goal.title}: ${goal.contextNote.trim()}`);
+    }
   }
 
+  const active = activeGoalTitle ? goals.find((g) => g.title === activeGoalTitle) : undefined;
+  if (active) {
+    lines.push(
+      `ACTIVE TOPIC: ${active.title}. The student selected this topic in the chat header, so the current conversation is about it.`,
+      '- Requests like "test me", "make me a test", or "generate a quiz" with no explicit topic refer to the ACTIVE TOPIC: call check_topic_mastery for it and negotiate the subtopic Socratically (lead with its weakest subtopic).',
+      '- Explanations, examples, and difficulty should assume this topic unless the student clearly switches subjects.'
+    );
+  }
   lines.push(
     'How to use this memory:',
     '- When the current message genuinely relates to one of these goals (same subject or concept), connect your guidance to the weakest subtopics and OFFER to generate a short test to measure mastery: say something like "Want me to give you a quick test on <subtopic>?" and wait for the student to agree. Use the get_learning_goals tool if you need current mastery numbers.',
@@ -389,6 +411,28 @@ export function buildGoalMemoryBlock(goals: GoalMemoryGoal[]): string {
   );
 
   return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Active-topic chat context (header picker plumbing) — parity with Express
+// ---------------------------------------------------------------------------
+
+/** Minimal goal-row shape needed to resolve the picker selection to a title. */
+export interface GoalIdTitleRow {
+  id: string;
+  title: string;
+}
+
+/**
+ * Resolves the chat header picker's activeGoalId to the goal's title for the
+ * system-prompt block. Unknown/missing ids yield undefined (no active topic).
+ */
+export function resolveActiveGoalTitle(
+  goalRows: GoalIdTitleRow[],
+  activeGoalId?: string
+): string | undefined {
+  if (!activeGoalId || !goalRows || goalRows.length === 0) return undefined;
+  return goalRows.find((g) => g && g.id === activeGoalId)?.title;
 }
 
 // ---------------------------------------------------------------------------

@@ -127,6 +127,99 @@ export function clampHistoryForTokenBudget(
   return kept;
 }
 
+/**
+ * Hard limit for Groq's openai/gpt-oss-120b free/dev tier: 8,000 TPM.
+ * Safe context budget for input messages is ~5,500 tokens (~22,000 chars),
+ * leaving room for output generation and tool schemas within the 8k/min window.
+ */
+export const GROQ_MAX_CONTEXT_TOKENS = 5500;
+export const GROQ_TPM_LIMIT = 8000;
+
+function extractMessageText(m: any): string {
+  if (!m) return '';
+  if (typeof m.content === 'string') return m.content;
+  if (Array.isArray(m.content)) {
+    return m.content.map((c: any) => (typeof c === 'string' ? c : c?.text || '')).join(' ');
+  }
+  return String(m.content ?? '');
+}
+
+function cloneMessageWithText<T>(m: T, text: string): T {
+  if (!m || typeof m !== 'object') return m;
+  const cloned = Object.assign(Object.create(Object.getPrototypeOf(m)), m);
+  cloned.content = text;
+  return cloned;
+}
+
+/**
+ * Dynamically shrinks a chat messages array if total estimated tokens
+ * approach or exceed the token budget (e.g. Groq 8k TPM cap).
+ *
+ * Algorithm:
+ * 1. Preserves the first message (system prompt / rules / memory).
+ * 2. Preserves the latest message (user query or latest tool result).
+ * 3. Progressively drops oldest intermediate conversation turns.
+ * 4. Truncates oversized messages (e.g. huge pasted code or fat dumps).
+ */
+export function shrinkContextForTokenBudget<T extends { content?: any }>(
+  messages: T[],
+  maxTokens: number = GROQ_MAX_CONTEXT_TOKENS
+): T[] {
+  if (!Array.isArray(messages) || messages.length === 0) return [];
+  if (messages.length === 1) {
+    const text = extractMessageText(messages[0]);
+    if (estimateTokens(text) <= maxTokens) return messages;
+    const maxChars = Math.max(100, maxTokens * 4);
+    const truncatedText = `${text.slice(0, maxChars)}\n[...context truncated to stay within Groq 8k token limit...]`;
+    return [cloneMessageWithText(messages[0], truncatedText)];
+  }
+
+  let totalTokens = messages.reduce((acc, m) => acc + estimateTokens(extractMessageText(m)), 0);
+  if (totalTokens <= maxTokens) {
+    return messages;
+  }
+
+  // Always retain first (system) and last (current query/turn)
+  const systemMsg = messages[0];
+  const lastMsg = messages[messages.length - 1];
+  const intermediate = messages.slice(1, -1);
+
+  // 1. Drop oldest intermediate turns
+  while (intermediate.length > 0 && totalTokens > maxTokens) {
+    const dropped = intermediate.shift();
+    totalTokens -= estimateTokens(extractMessageText(dropped));
+  }
+
+  const result: T[] = [systemMsg, ...intermediate, lastMsg];
+  totalTokens = result.reduce((acc, m) => acc + estimateTokens(extractMessageText(m)), 0);
+
+  // 2. If still exceeding budget, truncate oversized messages
+  if (totalTokens > maxTokens) {
+    const lastText = extractMessageText(lastMsg);
+    const lastTokens = estimateTokens(lastText);
+    const sysText = extractMessageText(systemMsg);
+    const sysTokens = estimateTokens(sysText);
+
+    // Reserve headroom for system prompt
+    const allowedLastTokens = Math.max(400, maxTokens - sysTokens - 50);
+    if (lastTokens > allowedLastTokens) {
+      const allowedChars = allowedLastTokens * 4;
+      const truncatedLast = `${lastText.slice(0, allowedChars)}\n[...context truncated to stay within Groq 8k token limit...]`;
+      result[result.length - 1] = cloneMessageWithText(lastMsg, truncatedLast);
+    }
+
+    totalTokens = result.reduce((acc, m) => acc + estimateTokens(extractMessageText(m)), 0);
+    if (totalTokens > maxTokens) {
+      const allowedSysTokens = Math.max(200, maxTokens - estimateTokens(extractMessageText(result[result.length - 1])) - 20);
+      const allowedChars = allowedSysTokens * 4;
+      const truncatedSys = `${sysText.slice(0, allowedChars)}\n[...context truncated to stay within Groq 8k token limit...]`;
+      result[0] = cloneMessageWithText(systemMsg, truncatedSys);
+    }
+  }
+
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Groq 429 retry
 // ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, AIMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
 import { createScopedClient } from '../config/supabase.js';
 import { createAgentTools, sanitizeToolArgs } from './tools.js';
-import { clampHistoryForTokenBudget, retryOnGroqRateLimit } from './tokenBudget.js';
+import { clampHistoryForTokenBudget, retryOnGroqRateLimit, shrinkContextForTokenBudget } from './tokenBudget.js';
 import {
   buildGoalMemoryBlock,
   sanitizeClientGoals,
@@ -325,7 +325,8 @@ export async function processAgentChat(
   // Every LLM call goes through retryOnGroqRateLimit: ChatOpenAI surfaces a
   // Groq 429 (org TPM cap) as a thrown error; we wait out Groq's retry-after
   // and retry instead of surfacing an error card to the student.
-  const invokeWithRetry = (msgs: any[]) => retryOnGroqRateLimit(() => llmWithTools.invoke(msgs));
+  const invokeWithRetry = (msgs: any[]) =>
+    retryOnGroqRateLimit(() => llmWithTools.invoke(shrinkContextForTokenBudget(msgs)));
   let aiResponse = await invokeWithRetry(messages);
   const toolExecutions: any[] = [];
   const maxIterations = 3;

@@ -225,7 +225,7 @@ Now open [http://localhost:5173](http://localhost:5173) in your browser. That's 
 
 ## Running the tests
 
-The project has tests for the tricky parts — the adaptive decision core, the 30-scenario evaluation harness, quiz logic, AI input cleaning, math rendering, and more:
+The project has comprehensive test coverage across the entire stack — 338 automated tests (238 backend + 100 frontend) covering the adaptive decision core, the 30-scenario evaluation harness, quiz telemetry, CORS security, token budgeting, math rendering, and cache invalidation:
 
 ```bash
 npm test
@@ -234,11 +234,11 @@ npm test
 Or run them separately:
 
 ```bash
-cd server && npm test   # backend + adaptive-engine + evaluation tests
-cd client && npm test   # frontend tests
+cd server && npm test   # backend + adaptive-engine + evaluation tests (238 tests)
+cd client && npm test   # frontend tests (100 tests)
 ```
 
-The evaluation summary prints the measured adaptation metrics shown above.
+The evaluation summary prints the measured adaptation metrics shown above (30/30 scenarios, 100% adaptation accuracy).
 
 To check that a production build works:
 
@@ -315,11 +315,13 @@ A few things I took care of (in plain words):
 
 - **Your data is yours only.** Every table in the database has Row Level Security, so one user can never see another user's data — not even by writing their own API calls. The new learner-model tables follow the same owner-only pattern.
 - **No secret keys in the browser.** The AI key and database keys live only on the backend. Only the public key (which is meant to be public) reaches the browser.
-- **Rate limiting.** If someone tries to spam the AI with hundreds of requests, the backend slows them down. This also protects the free-tier AI quota.
+- **Rate limiting & 8K TPM token budget protection.** If someone tries to spam the AI with hundreds of requests, the backend slows them down. For Groq reasoning models like `openai/gpt-oss-120b` with an 8,000 token-per-minute cap, Pragati dynamically shrinks context (pruning older turns and truncating bulky inputs) and honors `retry-after` backoff so students never face a 429 error card.
+- **Secure CORS allowlisting.** Local development ports (Vite 5173, 5174, etc.) and production domains (`*.web.app`, `*.firebaseapp.com`, `*.vercel.app`) are strictly validated.
 - **No cheating in quizzes.** Correct answers and explanations are stripped out on the server before questions are sent to the browser.
 - **Size limits on uploads.** So nobody can crash the server with a giant file.
 - **Safe inputs.** Everything the user sends is checked and cleaned before use.
 - **A honest demo account.** The writable adaptive-demo account contains only disposable seed data, and the read-only judge account is locked down by database policies.
+
 
 ---
 

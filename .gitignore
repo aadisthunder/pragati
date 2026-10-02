@@ -79,6 +79,7 @@ GEMINI.md
 .playwright-mcp/
 test_*.png
 test_*.jpg
+screenshot_*.png
 *.playwright.png
 
 # Agent tooling / local scratch

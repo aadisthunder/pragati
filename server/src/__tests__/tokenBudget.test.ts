@@ -4,6 +4,7 @@ import {
   compactAttempts,
   estimateTokens,
   clampHistoryForTokenBudget,
+  shrinkContextForTokenBudget,
 } from '../agent/tokenBudget';
 
 const fatMissed = Array.from({ length: 10 }, (_, i) => ({
@@ -132,3 +133,45 @@ describe('tokenBudget: clampHistoryForTokenBudget', () => {
     expect(clampHistoryForTokenBudget(history as any, 4000)).toHaveLength(1);
   });
 });
+
+describe('tokenBudget: shrinkContextForTokenBudget (Groq 8k TPM cap)', () => {
+  it('returns messages unchanged if total tokens are within budget', () => {
+    const messages = [
+      { role: 'system', content: 'You are Pragati tutor.' },
+      { role: 'user', content: 'Hello!' },
+    ];
+    const shrunk = shrinkContextForTokenBudget(messages, 5000);
+    expect(shrunk).toEqual(messages);
+  });
+
+  it('prunes oldest conversation turns when context exceeds token budget', () => {
+    const messages = [
+      { role: 'system', content: 'System prompt' },
+      { role: 'user', content: 'User 1: ' + 'a'.repeat(2000) },
+      { role: 'assistant', content: 'Assistant 1: ' + 'b'.repeat(2000) },
+      { role: 'user', content: 'User 2: ' + 'c'.repeat(2000) },
+      { role: 'assistant', content: 'Assistant 2: ' + 'd'.repeat(2000) },
+      { role: 'user', content: 'User 3 (latest): ' + 'e'.repeat(400) },
+    ];
+    // Total chars = ~8400 chars (~2100 tokens). Limit to 1000 tokens.
+    const shrunk = shrinkContextForTokenBudget(messages, 1000);
+    expect(shrunk[0].content).toBe('System prompt');
+    expect(shrunk[shrunk.length - 1].content).toContain('User 3 (latest)');
+    expect(shrunk.length).toBeLessThan(messages.length);
+    const totalTokens = shrunk.reduce((acc, m) => acc + estimateTokens(m.content), 0);
+    expect(totalTokens).toBeLessThanOrEqual(1000);
+  });
+
+  it('truncates oversized message content to fit under the 8k token cap', () => {
+    const hugeMessage = [
+      { role: 'system', content: 'System prompt' },
+      { role: 'user', content: 'Huge prompt: ' + 'x'.repeat(40_000) }, // 10k tokens alone
+    ];
+    const shrunk = shrinkContextForTokenBudget(hugeMessage, 5500);
+    expect(shrunk).toHaveLength(2);
+    expect(shrunk[1].content).toContain('[...context truncated to stay within Groq 8k token limit...]');
+    const totalTokens = shrunk.reduce((acc, m) => acc + estimateTokens(m.content), 0);
+    expect(totalTokens).toBeLessThanOrEqual(5550);
+  });
+});
+

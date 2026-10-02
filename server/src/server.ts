@@ -54,7 +54,10 @@ app.use(
       if (!origin) return callback(null, true);
       if (
         allowedOrigins.includes(origin) ||
-        /^https:\/\/.*\.vercel\.app$/.test(origin)
+        /^https:\/\/.*\.vercel\.app$/.test(origin) ||
+        /^https:\/\/.*\.web\.app$/.test(origin) ||
+        /^https:\/\/.*\.firebaseapp\.com$/.test(origin) ||
+        /^http:\/\/(localhost|127\.0\.0\.1)(:[0-9]+)?$/.test(origin)
       ) {
         return callback(null, true);
       }

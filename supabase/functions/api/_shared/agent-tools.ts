@@ -492,13 +492,19 @@ For each question, "concepts" must list the 1-2 specific sub-concepts that quest
 /**
  * Detects when the model dumps quiz questions/options into the chat text
  * instead of letting the interactive card carry the assessment.
+ *
+ * Covers the leak formats observed in production: numbered lists (plain or
+ * bold), bold "Q1." style headers, and both "A)" and "A." option markers —
+ * while staying quiet on normal tutoring prose.
  */
 export function containsQuizSpoilers(text: string): boolean {
   if (!text) return false;
   return (
     /Question\s*\d+/i.test(text) ||
     /###\s*Questions/i.test(text) ||
-    /\bA\)\s+/.test(text)
+    /\bA\)\s+/.test(text) ||
+    /(^|\n)\s*\*{0,2}(?:Q\d+|\d+)\.?\*{0,2}\s*\*{0,2}(?:What|Which|Differentiate|If|Calculate|Solve|Find|Evaluate|Simplify)\b/i.test(text) ||
+    /(^|\n)\s*[A-D]\.\s+\S/.test(text)
   );
 }
 
