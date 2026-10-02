@@ -85,10 +85,32 @@ The harness covers the cases that matter: hidden prerequisite failures, hint-rel
 
 - **Socratic AI tutor** — guides with questions instead of dumping answers; streams live; handles LaTeX math and photos of handwritten problems (OCR).
 - **Goal-driven learning memory** — on first login Pragati asks what you want to master, generates a subtopic plan, and remembers it: the tutor weaves your goals into every chat (and offers a test when the conversation touches one), while the Topics page tracks a live mastery percentage per topic and subtopic from real quiz evidence.
-- **Quiz arena** — AI-generated quizzes on any topic, hints during the test, question palette, per-question telemetry captured client-side.
+- **Quiz arena & standalone generation** — AI-generated quizzes on any topic (including quick standalone generation chips), hints during the test, question palette, per-question telemetry captured client-side.
 - **Anti-cheating by design** — correct answers and explanations are stripped on the server before questions reach the browser.
-- **Analytics** — concept mastery map, topic breakdowns, accuracy progression curve, Elo-style skill rating, due-review counts.
+- **Analytics & cognitive telemetry** — concept mastery map, topic breakdowns, accuracy progression curve, Elo-style skill rating, active deliberation dwell tracking.
+- **Unified onboarding & quick tour** — stylized feature preview modal on login for all accounts, with automatic onboarding gates.
+- **Mobile-first ergonomics** — 16px touch-friendly chat inputs, responsive bottom dock, legible cards, and accessible typography.
 - **Judge Mode** — seeded, deterministic demo (below).
+
+---
+
+## Visual Tour
+
+| Socratic AI Instructor | Topic Mastery Tracking |
+| :---: | :---: |
+| ![AI Instructor Chat](docs/screenshots/3_desktop_ai_chat.png) | ![Topic Mastery](docs/screenshots/4_desktop_topics_mastery.png) |
+
+| Quizzes Arena | Telemetry & Analytics |
+| :---: | :---: |
+| ![Quizzes Arena](docs/screenshots/5_desktop_quizzes_arena.png) | ![Student Analytics](docs/screenshots/6_desktop_analytics.png) |
+
+<p align="center">
+  <img src="docs/screenshots/1_feature_tour.png" width="45%" alt="Quick Feature Tour" />
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/8_mobile_topics.png" width="24%" alt="Mobile Topics" />
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/10_mobile_analytics.png" width="24%" alt="Mobile Analytics" />
+</p>
 
 ---
 
@@ -225,7 +247,7 @@ Now open [http://localhost:5173](http://localhost:5173) in your browser. That's 
 
 ## Running the tests
 
-The project has comprehensive test coverage across the entire stack — 338 automated tests (238 backend + 100 frontend) covering the adaptive decision core, the 30-scenario evaluation harness, quiz telemetry, CORS security, token budgeting, math rendering, and cache invalidation:
+The project has comprehensive test coverage across the entire stack — 343 automated tests (238 backend + 105 frontend) covering the adaptive decision core, the 30-scenario evaluation harness, quiz telemetry, CORS security, token budgeting, math rendering, cache invalidation, and mobile typography:
 
 ```bash
 npm test
@@ -235,7 +257,7 @@ Or run them separately:
 
 ```bash
 cd server && npm test   # backend + adaptive-engine + evaluation tests (238 tests)
-cd client && npm test   # frontend tests (100 tests)
+cd client && npm test   # frontend tests (105 tests)
 ```
 
 The evaluation summary prints the measured adaptation metrics shown above (30/30 scenarios, 100% adaptation accuracy).
