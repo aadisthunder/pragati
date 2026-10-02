@@ -233,9 +233,8 @@ export const TopicsPage: React.FC = () => {
           <div className="bg-white border border-slate-200 p-12 text-center rounded-2xl shadow-md">
             <BookOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
             <h3 className="text-base font-display font-bold text-slate-900">No topics yet</h3>
-            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-              Add a topic you want to master. Pragati will remember it, generate subtopics, and track your mastery as
-              you take quizzes.
+            <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-sm mx-auto">
+              Add a topic you want to master to track progress across quizzes.
             </p>
             <button
               type="button"
@@ -260,7 +259,7 @@ export const TopicsPage: React.FC = () => {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <h3 className="text-base font-display font-bold text-slate-900 truncate">{goal.title}</h3>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
+                      <p className="text-xs text-slate-500 mt-0.5">
                         {goal.subtopics.length === 0
                           ? 'No subtopics yet'
                           : weakest && weakest.masteryPct < 100
@@ -283,7 +282,7 @@ export const TopicsPage: React.FC = () => {
                   {/* Overall mastery bar */}
                   <div className="mt-3.5">
                     <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider font-display">
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider font-display">
                         Mastery
                       </span>
                       <span className="text-xs font-mono font-bold text-slate-800">{goal.masteryPct}%</span>
@@ -304,7 +303,7 @@ export const TopicsPage: React.FC = () => {
                           key={st.id}
                           className="flex items-center gap-2.5 group"
                         >
-                          <span className="text-xs font-medium text-slate-700 w-28 sm:w-40 truncate shrink-0" title={st.name}>
+                          <span className="text-sm sm:text-xs font-medium text-slate-700 w-28 sm:w-40 truncate shrink-0" title={st.name}>
                             {st.name}
                           </span>
                           <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden min-w-8">
@@ -313,7 +312,7 @@ export const TopicsPage: React.FC = () => {
                               style={{ width: `${Math.max(1, Math.min(100, st.masteryPct))}%` }}
                             />
                           </div>
-                          <span className="text-[10px] font-mono font-semibold text-slate-500 w-8 text-right shrink-0">
+                          <span className="text-xs font-mono font-semibold text-slate-500 w-8 text-right shrink-0">
                             {st.masteryPct}%
                           </span>
                           <button
@@ -373,7 +372,7 @@ export const TopicsPage: React.FC = () => {
                           onClick={() => handleGenerateSubtopics(goal)}
                           disabled={isBusy || isGenerating}
                           title="Generate subtopics with AI"
-                          className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
+                          className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-sm sm:text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
                         >
                           {isGenerating ? (
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -390,7 +389,7 @@ export const TopicsPage: React.FC = () => {
                           const testPrompt = buildTestMePrompt(goal);
                           navigate(`/instructor?prompt=${encodeURIComponent(testPrompt)}`);
                         }}
-                        className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors shadow-xs cursor-pointer"
+                        className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-sm sm:text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors shadow-xs cursor-pointer"
                       >
                         <span>Test me</span>
                         <ArrowRight className="w-3.5 h-3.5" />

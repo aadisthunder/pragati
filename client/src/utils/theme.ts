@@ -23,7 +23,7 @@ export function getSidebarNavItemClass(isActive: boolean): string {
  * Neutral Badge styling with clean slate pill styling
  */
 export function getSecondaryBadgeClass(): string {
-  return 'inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider font-display px-2.5 py-0.5 rounded-full border border-slate-200 bg-slate-50 text-slate-700';
+  return 'inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider font-display px-2.5 py-0.5 rounded-full border border-slate-200 bg-slate-50 text-slate-700';
 }
 
 /**
@@ -226,7 +226,7 @@ export function getUploadButtonClass(): string {
  * readable without zooming; slightly roomier leading for small screens.
  */
 export function getChatMessageTextClass(): string {
-  return 'text-[15px] sm:text-[15.5px] leading-relaxed';
+  return 'text-[16px] leading-relaxed';
 }
 
 /**

@@ -9,7 +9,14 @@
 export const POPUP_TOUR = 'tour' as const;
 export const POPUP_GOAL_MODAL = 'goal-modal' as const;
 
-/** What should open once the feature tour has been dismissed/finished. */
-export function nextPopupAfterTour(): typeof POPUP_GOAL_MODAL {
+/**
+ * What should open once the feature tour has been dismissed/finished.
+ * Only opens the new topic creation modal if no topics currently exist.
+ */
+export function nextPopupAfterTour(
+  hasExistingTopics: boolean | number = false
+): typeof POPUP_GOAL_MODAL | null {
+  const count = typeof hasExistingTopics === 'number' ? hasExistingTopics : hasExistingTopics ? 1 : 0;
+  if (count > 0) return null;
   return POPUP_GOAL_MODAL;
 }

@@ -23,6 +23,8 @@ import { buildSidebarNavItems, filterVisibleChatSessions, HELP_TOUR_PATH } from 
 import { FeatureTourModal } from '../tour/FeatureTourModal';
 import { nextPopupAfterTour, POPUP_GOAL_MODAL } from '../tour/onboardingFlow';
 import {
+  fetchGoals,
+  getGoalsFromCache,
   refreshGoals,
   saveDemoGoalsSession,
 } from '../../api/goals';
@@ -81,30 +83,38 @@ export const AppShell: React.FC = () => {
     return () => window.removeEventListener('chat_sessions_updated', handleUpdated);
   }, [fetchSessions, location.pathname, location.search]);
 
-  // First-login popup sequence: feature tour FIRST, then the goal modal.
-  // The demo accounts can never persist the onboarding flag, so this sequence
-  // fires on every fresh load for them — intentional (judge experience). The
-  // once-per-mount guard prevents a profile refresh from re-opening popups
-  // right after the user closes them.
-  const onboardingAutoOpenedRef = useRef(false);
+  // On login, every account sees the Help tour popup once per session.
+  // Consistent on all accounts with zero judge-specific logic.
+  const tourAutoOpenedRef = useRef(false);
   useEffect(() => {
-    if (!onboardingAutoOpenedRef.current && profile && profile.onboarding_completed === false) {
-      onboardingAutoOpenedRef.current = true;
-      setShowTour(true);
+    if (!tourAutoOpenedRef.current && (user || profile)) {
+      const hasShownTour = sessionStorage.getItem('pragati_login_tour_shown');
+      if (!hasShownTour) {
+        tourAutoOpenedRef.current = true;
+        sessionStorage.setItem('pragati_login_tour_shown', 'true');
+        setShowTour(true);
+      }
     }
-  }, [profile]);
+  }, [user, profile]);
 
-  const handleTourClose = useCallback(() => {
+  const handleTourClose = useCallback(async () => {
     setShowTour(false);
-    // Tour finished/skipped: open the goal-setting popup next, but only for the
-    // first-login sequence — replaying from the Help link skips it.
-    if (
-      !tourOpenedViaHelpRef.current &&
-      nextPopupAfterTour() === POPUP_GOAL_MODAL
-    ) {
-      setShowOnboarding(true);
-    }
+    const wasHelpLink = tourOpenedViaHelpRef.current;
     tourOpenedViaHelpRef.current = false;
+    if (wasHelpLink) return;
+
+    // Tour finished/skipped: only open new topic modal if no topics currently exist
+    try {
+      const cached = getGoalsFromCache();
+      const existingGoals = cached.length > 0 ? cached : await fetchGoals();
+      if (nextPopupAfterTour(existingGoals.length > 0) === POPUP_GOAL_MODAL) {
+        setShowOnboarding(true);
+      }
+    } catch {
+      if (getGoalsFromCache().length === 0) {
+        setShowOnboarding(true);
+      }
+    }
   }, []);
 
   // Help sidebar link: pops the same slides shown on first login.
@@ -205,6 +215,7 @@ export const AppShell: React.FC = () => {
   };
 
   const handleSignOut = async () => {
+    sessionStorage.removeItem('pragati_login_tour_shown');
     await signOut();
     navigate('/login');
   };

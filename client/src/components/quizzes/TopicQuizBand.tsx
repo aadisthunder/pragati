@@ -69,13 +69,13 @@ export const TopicQuizBand: React.FC<TopicQuizBandProps> = ({ group, onOpenQuiz,
                   <span className="capitalize">{quiz.difficulty}</span>
                 </span>
                 <div className="flex items-center gap-1">
-                  <span className="text-[11px] font-mono font-medium text-slate-500">
+                  <span className="text-xs font-mono font-medium text-slate-500">
                     {formatRelativeTime(quiz.created_at)}
                   </span>
                   {renderMenu(quiz)}
                 </div>
               </div>
-              <h5 className="text-sm font-display font-bold text-slate-800 line-clamp-2" title={quiz.topic}>
+              <h5 className="text-[15px] sm:text-sm font-display font-bold text-slate-800 line-clamp-2" title={quiz.topic}>
                 {quiz.topic}
               </h5>
               <p className="text-xs text-slate-500 mt-1.5 font-mono font-semibold">
@@ -86,7 +86,7 @@ export const TopicQuizBand: React.FC<TopicQuizBandProps> = ({ group, onOpenQuiz,
                   type="button"
                   onClick={() => onOpenQuiz(quiz.id)}
                   title={`Attempt "${quiz.topic}" (${quiz.total_questions} questions)`}
-                  className="w-full py-2 text-xs font-semibold text-slate-800 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-300 hover:border-slate-400 rounded-xl shadow-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-[0.99] cursor-pointer"
+                  className="w-full py-2.5 sm:py-2 text-sm sm:text-xs font-semibold text-slate-800 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-300 hover:border-slate-400 rounded-xl shadow-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-[0.99] cursor-pointer"
                 >
                   <span>Attempt Quiz</span>
                   <ArrowRight className="w-3.5 h-3.5" />

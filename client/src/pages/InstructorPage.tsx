@@ -55,7 +55,7 @@ interface Message {
 
 const PLACEHOLDER_PHRASES = [
   'Ask a doubt...',
-  'Diagnose my weak spots...',
+  'Generate a practice quiz...',
   'Review missed questions...',
   'Plan my learning path...',
 ];
@@ -465,7 +465,7 @@ export const InstructorPage: React.FC = () => {
                     adjustTextareaHeight();
                   }, 20);
                 }}
-                className="text-xs font-medium px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-xs whitespace-nowrap active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex-shrink-0"
+                className="text-[13px] sm:text-xs font-medium px-3 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-xs whitespace-nowrap active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex-shrink-0"
               >
                 {chip.label}
               </button>
@@ -786,7 +786,7 @@ export const InstructorPage: React.FC = () => {
                       adjustTextareaHeight();
                     }, 20);
                   }}
-                  className="text-xs font-medium px-2.5 py-1 rounded-lg sm:rounded-xl bg-white/95 backdrop-blur-xs border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-xs whitespace-nowrap flex-shrink-0 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  className="text-[13px] sm:text-xs font-medium px-2.5 py-1.5 sm:py-1 rounded-lg sm:rounded-xl bg-white/95 backdrop-blur-xs border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 transition-colors shadow-xs whitespace-nowrap flex-shrink-0 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {chip.label}
                 </button>

@@ -212,8 +212,8 @@ export const QuizzesPage: React.FC = () => {
               <CheckSquare className="w-5 h-5 sm:w-6 sm:h-6 text-slate-800" />
               <span>Quizzes Arena</span>
             </h2>
-            <p className="text-xs text-slate-500 font-medium mt-1">
-              Tests tied to your topics keep your mastery bars moving; standalone quizzes live below
+            <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+              Practice tests & assessments
             </p>
           </div>
 
@@ -268,12 +268,9 @@ export const QuizzesPage: React.FC = () => {
               <section className="space-y-3">
                 <div className="flex items-center gap-2 pt-1">
                   <Layers className="w-3.5 h-3.5 text-slate-500" />
-                  <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider font-display">
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider font-display">
                     From your topics
                   </h3>
-                  <span className="text-[11px] text-slate-400">
-                    — every attempt here updates mastery in My Topics
-                  </span>
                 </div>
                 {/* One full-width horizontal band per topic: every quiz of that
                     topic lives in this single band; overflow scrolls sideways
@@ -298,12 +295,9 @@ export const QuizzesPage: React.FC = () => {
               <section className="space-y-3">
                 <div className="flex items-center gap-2 pt-1">
                   <CheckSquare className="w-3.5 h-3.5 text-slate-500" />
-                  <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider font-display">
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider font-display">
                     Standalone quizzes
                   </h3>
-                  <span className="text-[11px] text-slate-400">
-                    — one-off tests not tied to a topic
-                  </span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 min-w-0">
                   {independents.map((quiz) => (
@@ -335,7 +329,7 @@ export const QuizzesPage: React.FC = () => {
                           </div>
                         </div>
 
-                        <h3 className="text-sm font-display font-bold text-slate-800 line-clamp-2">
+                        <h3 className="text-[15px] sm:text-sm font-display font-bold text-slate-800 line-clamp-2">
                           {quiz.topic}
                         </h3>
                         <p className="text-xs text-slate-500 mt-2 font-mono font-semibold">
@@ -345,7 +339,7 @@ export const QuizzesPage: React.FC = () => {
 
                       <button
                         onClick={() => navigate(`/quizzes/${quiz.id}`)}
-                        className="mt-6 w-full py-2 text-xs font-semibold text-slate-800 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-300 hover:border-slate-400 rounded-xl shadow-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-[0.99] cursor-pointer"
+                        className="mt-6 w-full py-2.5 sm:py-2 text-sm sm:text-xs font-semibold text-slate-800 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-300 hover:border-slate-400 rounded-xl shadow-xs transition-all duration-150 flex items-center justify-center gap-1.5 active:scale-[0.99] cursor-pointer"
                       >
                         <span>Attempt Quiz</span>
                         <ArrowRight className="w-3.5 h-3.5" />

@@ -133,8 +133,8 @@ export const AnalyticsPage: React.FC = () => {
               <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 text-slate-800" />
               <span>Student Analytics</span>
             </h2>
-            <p className="text-xs text-slate-500 font-medium mt-1">
-              Cognitive telemetry, dwell time distribution, and topic mastery curves
+            <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+              Skill telemetry & mastery curves
             </p>
           </div>
         </div>
@@ -158,7 +158,7 @@ export const AnalyticsPage: React.FC = () => {
               </span>
             )}
           </div>
-          <span className="text-[11px] font-semibold text-slate-400 mt-1 block">Dynamic ELO score</span>
+          <span className="text-xs font-semibold text-slate-400 mt-1 block">Dynamic ELO score</span>
         </div>
 
         <div className={`${getPermanentCardClass()} p-3 sm:p-4 min-w-0`}>
@@ -178,7 +178,7 @@ export const AnalyticsPage: React.FC = () => {
               </span>
             )}
           </div>
-          <span className="text-[11px] font-semibold text-slate-400 mt-1 block">
+          <span className="text-xs font-semibold text-slate-400 mt-1 block">
             Across {metrics?.total_attempts || 0} attempts
           </span>
         </div>
@@ -195,7 +195,7 @@ export const AnalyticsPage: React.FC = () => {
               {metrics?.avg_dwell_time_sec || 0}s
             </p>
           </div>
-          <span className="text-[11px] font-semibold text-slate-400 mt-1 block">Active deliberation</span>
+          <span className="text-xs font-semibold text-slate-400 mt-1 block">Active deliberation</span>
         </div>
 
         <div className={`${getPermanentCardClass()} p-3 sm:p-4 min-w-0`}>
@@ -210,7 +210,7 @@ export const AnalyticsPage: React.FC = () => {
               {metrics?.total_time_spent_min || 0}m
             </p>
           </div>
-          <span className="text-[11px] font-semibold text-slate-400 mt-1 block">
+          <span className="text-xs font-semibold text-slate-400 mt-1 block">
             {metrics?.total_questions_answered || 0} questions
           </span>
         </div>
@@ -219,7 +219,7 @@ export const AnalyticsPage: React.FC = () => {
       {/* Accuracy & Speed Performance Curve */}
       <div className={`${getPermanentCardClass()} p-3.5 sm:p-5 space-y-3 min-w-0 overflow-hidden`}>
         <div className="flex items-center justify-between">
-          <h3 className="text-sm sm:text-base font-display font-bold text-slate-900">Quiz Accuracy Progression Curve</h3>
+          <h3 className="text-sm sm:text-base font-display font-bold text-slate-900">Accuracy Progression</h3>
           <span className="text-xs font-mono font-semibold text-slate-400">Past Attempts</span>
         </div>
 
@@ -259,8 +259,8 @@ export const AnalyticsPage: React.FC = () => {
               <BarChart3 className="w-5 h-5" />
             </div>
             <p className="text-xs font-semibold text-slate-700">No quiz attempts recorded yet</p>
-            <p className="text-[11px] text-slate-400 max-w-xs">
-              Complete your first quiz with the AI Instructor to record accuracy telemetry.
+            <p className="text-xs text-slate-400 max-w-xs">
+              Complete your first quiz to record accuracy telemetry.
             </p>
           </div>
         )}
@@ -276,7 +276,7 @@ export const AnalyticsPage: React.FC = () => {
             </h3>
             <div className="flex items-center gap-2">
               {(metrics?.due_reviews || 0) > 0 && (
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
                   <RefreshCw className="w-3 h-3" />
                   <span>{metrics.due_reviews} due for review</span>
                 </span>
@@ -300,15 +300,15 @@ export const AnalyticsPage: React.FC = () => {
                       style={{ width: `${Math.max(3, c.mastery_pct)}%` }}
                     />
                   </div>
-                  <span className="w-20 shrink-0 text-right text-[11px] font-mono font-bold text-slate-600">
+                  <span className="w-20 shrink-0 text-right text-xs font-mono font-bold text-slate-600">
                     {c.mastery_pct}%{c.due ? ' · due' : ''}
                   </span>
                 </div>
               );
             })}
           </div>
-          <p className="text-[11px] text-slate-400">
-            Built from per-question telemetry: correctness, response time, hints, and skips update each concept's mastery after every attempt.
+          <p className="text-xs text-slate-400">
+            Updated after each quiz attempt.
           </p>
         </div>
       )}
@@ -318,7 +318,7 @@ export const AnalyticsPage: React.FC = () => {
         {/* Topic Mastery - Animated Bar Chart */}
         <div className={`${getPermanentCardClass()} p-4 sm:p-6 space-y-4 min-w-0 overflow-hidden`}>
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-display font-bold text-slate-900">Curriculum Topic Mastery</h3>
+            <h3 className="text-base font-display font-bold text-slate-900">Topic Mastery</h3>
             <span className="text-xs font-mono font-semibold text-slate-400">Mastery %</span>
           </div>
 
@@ -328,8 +328,8 @@ export const AnalyticsPage: React.FC = () => {
                 <Target className="w-5 h-5" />
               </div>
               <p className="text-xs font-semibold text-slate-700">No topic mastery telemetry yet</p>
-              <p className="text-[11px] text-slate-400 max-w-xs">
-                As you answer questions across curriculum topics, animated mastery telemetry will display here.
+              <p className="text-xs text-slate-400 max-w-xs">
+                Answer quiz questions to view topic mastery.
               </p>
             </div>
           ) : (
@@ -415,11 +415,11 @@ export const AnalyticsPage: React.FC = () => {
               {missedQuestions.map((q: any) => (
                 <div key={q.id} className="p-4 rounded-xl bg-slate-50/60 border border-slate-200/80 space-y-2.5 hover:border-slate-300 hover:shadow-xs transition-all duration-150">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-700 bg-slate-50 px-2.5 py-0.5 rounded-full border border-slate-200 font-display">
+                    <span className="text-xs font-bold text-slate-700 bg-slate-50 px-2.5 py-0.5 rounded-full border border-slate-200 font-display">
                       {q.topic}
                     </span>
                     <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-mono text-slate-400">
+                      <span className="text-xs font-mono text-slate-400">
                         {q.dwell_time_sec}s dwell time
                       </span>
                       <button
@@ -434,10 +434,10 @@ export const AnalyticsPage: React.FC = () => {
                     </div>
                   </div>
 
-                  <p className="text-xs font-medium text-slate-800 line-clamp-2">{q.prompt}</p>
+                  <p className="text-sm font-medium text-slate-800 line-clamp-2">{q.prompt}</p>
 
                   <div className="flex items-center justify-between pt-1">
-                    <span className="text-[11px] text-red-600 font-mono">
+                    <span className="text-xs text-red-600 font-mono">
                       Choice: {q.selected_answer || 'Skipped'}
                     </span>
                     <button

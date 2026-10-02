@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { cleanMarkdownText, buildQuizGeneratePrompt, formatRelativeTime } from './markdownCards';
+import {
+  cleanMarkdownText,
+  buildQuizGeneratePrompt,
+  formatRelativeTime,
+  CHIP_SUGGESTIONS,
+} from './markdownCards';
 
 describe('Markdown Cards Utilities', () => {
   describe('cleanMarkdownText', () => {
@@ -39,6 +44,16 @@ describe('Markdown Cards Utilities', () => {
       expect(formatRelativeTime(now - 10000, now)).toBe('Just now');
       expect(formatRelativeTime(now - 120000, now)).toBe('2 min ago');
       expect(formatRelativeTime(now - 7200000, now)).toBe('2 hours ago');
+    });
+  });
+
+  describe('CHIP_SUGGESTIONS', () => {
+    it('includes a quiz generation prompt suggestion instead of diagnosing weak spots', () => {
+      const labels = CHIP_SUGGESTIONS.map((c) => c.label);
+      expect(labels).not.toContain('Diagnose my weak spots');
+      const quizChip = CHIP_SUGGESTIONS.find((c) => /quiz/i.test(c.label));
+      expect(quizChip).toBeDefined();
+      expect(quizChip?.prompt).toContain('generate a quiz to test my understanding on topic : ');
     });
   });
 });

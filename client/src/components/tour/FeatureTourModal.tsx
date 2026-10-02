@@ -71,7 +71,7 @@ export const FeatureTourModal: React.FC<FeatureTourModalProps> = ({ open, onClos
             <img src="/logo.png" alt="" className="w-7 h-7 rounded-lg border border-slate-200" />
             <div>
               <p className="text-xs font-display font-extrabold text-slate-900 leading-none">Pragati</p>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-0.5">
                 Quick tour · {index + 1} of {total}
               </p>
             </div>
@@ -102,10 +102,10 @@ export const FeatureTourModal: React.FC<FeatureTourModalProps> = ({ open, onClos
                 {/* Copy */}
                 <div className="pt-4 pb-1 min-h-[168px]">
                   <h3 className="text-lg font-display font-extrabold text-slate-900 tracking-tight">{s.title}</h3>
-                  <p className="text-xs text-slate-500 leading-relaxed mt-1.5">{s.description}</p>
+                  <p className="text-sm sm:text-xs text-slate-500 leading-relaxed mt-1.5">{s.description}</p>
                   <ul className="mt-3 space-y-1.5">
                     {s.features.map((f) => (
-                      <li key={f} className="flex items-start gap-2 text-xs text-slate-700">
+                      <li key={f} className="flex items-start gap-2 text-[13px] sm:text-xs text-slate-700">
                         <Check className="w-3.5 h-3.5 text-slate-800 shrink-0 mt-px" />
                         <span>{f}</span>
                       </li>
@@ -138,7 +138,7 @@ export const FeatureTourModal: React.FC<FeatureTourModalProps> = ({ open, onClos
               <button
                 type="button"
                 onClick={handleBack}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm sm:text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-colors cursor-pointer"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back</span>
@@ -147,7 +147,7 @@ export const FeatureTourModal: React.FC<FeatureTourModalProps> = ({ open, onClos
             <button
               type="button"
               onClick={handleNext}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors shadow-xs cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm sm:text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors shadow-xs cursor-pointer"
             >
               <span>{isLast ? slide.cta : 'Next'}</span>
               <ArrowRight className="w-3.5 h-3.5" />

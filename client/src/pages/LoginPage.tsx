@@ -14,8 +14,6 @@ export const LoginPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const destination = (location.state as any)?.from?.pathname || '/instructor';
-  /** The seeded diagnostic quiz — the judge demo's centerpiece. */
-  const JUDGE_DEMO_QUIZ = '/quizzes/11111111-1111-1111-1111-111111111111';
 
   useEffect(() => {
     if (user) {
@@ -28,9 +26,7 @@ export const LoginPage: React.FC = () => {
       setJudgeLoading(true);
       setError(null);
       await signInAsJudge();
-      // Route straight into the seeded diagnostic quiz so the adaptive-engine
-      // demo starts within seconds of clicking the button.
-      navigate(JUDGE_DEMO_QUIZ);
+      navigate(destination, { replace: true });
     } catch (err: any) {
       setError(err.message || 'Failed to start the judge demo');
     } finally {

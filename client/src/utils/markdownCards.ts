@@ -58,9 +58,8 @@ export const CHIP_SUGGESTIONS: ChipSuggestion[] = [
     prompt: 'I have a doubt regarding: ',
   },
   {
-    label: 'Diagnose my weak spots',
-    prompt:
-      'Check my quiz history and concept mastery: which concepts am I weakest in, and what exactly should I practice next?',
+    label: 'Generate a quiz',
+    prompt: 'generate a quiz to test my understanding on topic : ',
   },
   {
     label: 'Review missed questions',
